@@ -17,36 +17,64 @@ export function evaluate(s: GameState): number {
   if (s.winner === "goat") return -100000;
 
   let score = 0;
-  score += s.goatsCaptured * 1000;
+  score += s.goatsCaptured * 1200;
 
   const tigers = tigerPositions(s);
+  const tigerMoves: number[] = [];
   let mobility = 0;
+
   for (const t of tigers) {
     let free = 0;
-    for (const n of ADJACENCY[t]) if (s.cells[n] === "empty") free++;
-    for (const [over, to] of JUMPS[t]) {
-      if (s.cells[over] === "goat" && s.cells[to] === "empty") score += 1000; // capture threat
+    for (const n of ADJACENCY[t]) {
+      if (s.cells[n] === "empty") free++;
     }
+    let captureThreats = 0;
+    for (const [over, to] of JUMPS[t]) {
+      if (s.cells[over] === "goat" && s.cells[to] === "empty") {
+        captureThreats++;
+        score += 1400;
+      }
+    }
+    tigerMoves.push(free + captureThreats);
     mobility += free;
-    if (free === 0) score -= 200; // fully cornered
-    else if (free === 1) score -= 100; // partially cornered
-    score += CENTRALITY[t] * 8; // reward high-mobility central nodes
+    if (free === 0) score -= 260;
+    else if (free === 1) score -= 120;
+    score += CENTRALITY[t] * 10;
+    if (captureThreats > 0) score += captureThreats * 300;
   }
-  score += mobility * 100;
+  score += mobility * 120;
 
-  // Goats gain from compact, mutually defended formations.
+  if (tigers.length === 0) score -= 15000;
+  if (tigers.length === 1) score -= 4000;
+
+  const goats = s.cells.filter((c) => c === "goat").length;
+  let goatMobility = 0;
   let goatSupport = 0;
   s.cells.forEach((c, i) => {
     if (c !== "goat") return;
-    for (const n of ADJACENCY[i]) if (s.cells[n] === "goat") goatSupport++;
+    for (const n of ADJACENCY[i]) {
+      if (s.cells[n] === "empty") goatMobility++;
+      if (s.cells[n] === "goat") goatSupport++;
+    }
   });
-  score -= goatSupport * 12;
+  score -= goats * 25;
+  score -= goatMobility * 20;
+  score -= goatSupport * 18;
+
+  const totalLegal = legalMoves(s).length;
+  if (totalLegal > 0) score += Math.min(totalLegal, 12) * 15;
 
   return score;
 }
 
+function actionScore(s: GameState, move: Move) {
+  const next = applyMove(s, move);
+  const immediate = move.kind === "capture" ? 3000 : move.kind === "place" ? 400 : 0;
+  return immediate + evaluate(next);
+}
+
 function ordered(s: GameState, moves: Move[]) {
-  return [...moves].sort((a, b) => Number(b.kind === "capture") - Number(a.kind === "capture"));
+  return [...moves].sort((a, b) => actionScore(s, b) - actionScore(s, a));
 }
 
 function minimax(s: GameState, depth: number, alpha: number, beta: number): number {
@@ -73,11 +101,8 @@ function minimax(s: GameState, depth: number, alpha: number, beta: number): numb
 }
 
 function limitMoves(s: GameState, moves: Move[], difficulty: Difficulty) {
-  // Keep the search tractable during the goat placement phase on hard.
   if (s.turn !== "goat" || difficulty === "easy") return moves;
-  const scored = moves
-    .map((m) => ({ m, v: evaluate(applyMove(s, m)) }))
-    .sort((a, b) => a.v - b.v);
+  const scored = moves.map((m) => ({ m, v: actionScore(s, m) })).sort((a, b) => b.v - a.v);
   const width = difficulty === "hard" ? 8 : 12;
   return scored.slice(0, width).map((x) => x.m);
 }

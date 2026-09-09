@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 .output
+.vercel/
+.lof/
 .vinxi
 .tanstack/**
 .nitro

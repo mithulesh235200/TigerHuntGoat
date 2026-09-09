@@ -1,6 +1,6 @@
 # Aadu Pulli Amigo
 
-Create a complete, fully playable, and beautifully designed web-based game of "Aadu Pulli Aatam" (Lambs and Tigers / Goats and Tigers) using React, Tailwind CSS, HTML5 Canvas or SVG, and TypeScript. 
+Create a complete, fully playable, and beautifully designed web-based game of "Aadu Pulli Aatam" (Lambs and Tigers / Goats and Tigers) using React, Tailwind CSS, HTML5 Canvas or SVG, and TypeScript.
 
 Build this as a standalone, zero-dependency browser application with a smart, local algorithmic AI opponent. Implement the following architecture and feature set:
 
@@ -8,7 +8,7 @@ Build this as a standalone, zero-dependency browser application with a smart, lo
 
 - Map the traditional game board using the standard 23 intersecting vertex points (nodes) connected via a graph network (adjacency list representation).
 
-- Include all valid lines: 
+- Include all valid lines:
 
   - Central triangular apex (top node connected to 3 base nodes).
 
@@ -76,12 +76,6 @@ Build this as a standalone, zero-dependency browser application with a smart, lo
 
 - Sound effects (using Web Audio API or lightweight assets) for piece placement, captures, invalid move alerts, and win/loss states with a toggle mute button.
 
-This project was built with [Lovable](https://lovable.dev).
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/404a2378-37a5-4310-8800-9215d86493a8).
-
 - **Ship faster**: describe what you want to build and Lovable handles the code.
 - **Stay in sync**: every change made in Lovable is committed straight to this repository.
 - **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
@@ -96,3 +90,20 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+## Online Rooms and Vercel
+
+Online two-player rooms use Supabase Realtime for move synchronization. The app itself can be
+deployed to Vercel; Supabase only provides the realtime channel.
+
+1. Create a Supabase project and copy its project URL and anon key.
+2. Copy `.env.example` to `.env.local` and fill in `VITE_SUPABASE_URL` and
+  `VITE_SUPABASE_ANON_KEY`.
+3. Run `npm run dev` and choose **Online** to create a room. Copy the invite link for the Tiger
+  player.
+4. Import the repository into Vercel. The Vercel preset is already configured in `vite.config.ts`.
+5. Add the same two `VITE_` variables under Vercel project settings for Preview and Production,
+  then redeploy.
+
+The Supabase anon key is intended for browser use. Do not add a service-role key to the app or to
+Vercel client environment variables.
