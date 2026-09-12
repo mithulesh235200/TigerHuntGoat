@@ -4,20 +4,6 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/*
- * Design system definition.
- *
- * The @theme inline block maps CSS custom properties to Tailwind utility
- * classes (e.g. --color-primary -> bg-primary, text-primary).
- *
- * The :root and .dark blocks define the actual color values using oklch.
- * All colors MUST use oklch format.
- *
- * To add a new semantic color:
- * 1. Add the variable to :root (light value) and .dark (dark value)
- * 2. Register it in @theme inline as --color-<name>: var(--<name>)
- */
-
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -46,19 +32,6 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-ring-offset-background: var(--background);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
   --color-board: var(--board);
   --color-line: var(--line);
   --color-tiger: var(--tiger);
@@ -70,42 +43,59 @@
   --shadow-board: var(--shadow-board);
   --shadow-soft: var(--shadow-soft);
   --animate-pulse-ring: pulse-ring 1.6s ease-in-out infinite;
+  --animate-shimmer: shimmer 3s linear infinite;
+  --animate-float: float 4s ease-in-out infinite;
+  --animate-glow-pulse: glow-pulse 2.5s ease-in-out infinite;
 }
 
 @keyframes pulse-ring {
-  0%,
-  100% {
-    opacity: 0.55;
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.4));
   }
   50% {
-    opacity: 1;
+    filter: drop-shadow(0 0 28px rgba(245, 158, 11, 0.8));
   }
 }
 
 :root {
   --radius: 1rem;
-  --background: oklch(0.12 0.028 260);
+  --background: oklch(0.11 0.025 265);
   --foreground: oklch(0.96 0.015 250);
-  --card: oklch(0.16 0.032 260);
+  --card: oklch(0.15 0.03 260);
   --card-foreground: oklch(0.96 0.015 250);
-  --popover: oklch(0.16 0.032 260);
+  --popover: oklch(0.15 0.03 260);
   --popover-foreground: oklch(0.96 0.015 250);
-  --primary: oklch(0.68 0.18 45);
+  --primary: oklch(0.7 0.19 45);
   --primary-foreground: oklch(0.98 0.01 60);
-  --secondary: oklch(0.22 0.04 260);
+  --secondary: oklch(0.2 0.04 260);
   --secondary-foreground: oklch(0.92 0.02 250);
-  --muted: oklch(0.2 0.035 260);
+  --muted: oklch(0.18 0.035 260);
   --muted-foreground: oklch(0.72 0.03 250);
-  --accent: oklch(0.26 0.05 260);
+  --accent: oklch(0.25 0.05 260);
   --accent-foreground: oklch(0.98 0.01 250);
   --destructive: oklch(0.6 0.22 25);
   --destructive-foreground: oklch(0.98 0.01 250);
-  --border: oklch(0.28 0.04 260 / 0.5);
-  --input: oklch(0.28 0.04 260 / 0.6);
-  --ring: oklch(0.68 0.18 45);
-  --board: oklch(0.15 0.03 260);
-  --line: oklch(0.48 0.07 245);
-  --tiger: oklch(0.65 0.22 45);
+  --border: oklch(0.26 0.04 260 / 0.6);
+  --input: oklch(0.26 0.04 260 / 0.7);
+  --ring: oklch(0.7 0.19 45);
+  --board: oklch(0.13 0.03 260);
+  --line: oklch(0.5 0.08 245);
+  --tiger: oklch(0.68 0.22 45);
   --tiger-glow: oklch(0.85 0.2 65);
   --tiger-foreground: oklch(0.98 0.01 60);
   --tiger-ink: oklch(0.95 0.1 65);
@@ -113,52 +103,15 @@
   --goat-glow: oklch(0.92 0.12 165);
   --highlight: oklch(0.7 0.22 150);
   --danger: oklch(0.6 0.22 25);
-  --shadow-board:
-    0 25px 65px -15px oklch(0.05 0.03 260 / 0.8), 0 0 40px 0 oklch(0.65 0.22 45 / 0.08);
-  --shadow-soft: 0 12px 30px -10px oklch(0.05 0.03 260 / 0.6);
-  --chart-1: oklch(0.65 0.22 45);
-  --chart-2: oklch(0.75 0.16 160);
-  --chart-3: oklch(0.7 0.22 150);
-  --chart-4: oklch(0.6 0.22 25);
-  --chart-5: oklch(0.85 0.2 65);
-  --sidebar: oklch(0.16 0.032 260);
-  --sidebar-foreground: oklch(0.96 0.015 250);
-  --sidebar-primary: oklch(0.68 0.18 45);
-  --sidebar-primary-foreground: oklch(0.98 0.01 60);
-  --sidebar-accent: oklch(0.24 0.045 260);
-  --sidebar-accent-foreground: oklch(0.98 0.01 250);
-  --sidebar-border: oklch(0.28 0.04 260 / 0.5);
-  --sidebar-ring: oklch(0.68 0.18 45);
+  --shadow-board: 0 25px 65px -15px rgba(0, 0, 0, 0.9), 0 0 50px 0 rgba(245, 158, 11, 0.12);
+  --shadow-soft: 0 12px 30px -10px rgba(0, 0, 0, 0.7);
 }
 
 .dark {
-  --background: oklch(0.12 0.028 260);
+  --background: oklch(0.11 0.025 265);
   --foreground: oklch(0.96 0.015 250);
-  --card: oklch(0.16 0.032 260);
+  --card: oklch(0.15 0.03 260);
   --card-foreground: oklch(0.96 0.015 250);
-  --popover: oklch(0.16 0.032 260);
-  --popover-foreground: oklch(0.96 0.015 250);
-  --primary: oklch(0.68 0.18 45);
-  --primary-foreground: oklch(0.98 0.01 60);
-  --secondary: oklch(0.22 0.04 260);
-  --secondary-foreground: oklch(0.92 0.02 250);
-  --muted: oklch(0.2 0.035 260);
-  --muted-foreground: oklch(0.72 0.03 250);
-  --accent: oklch(0.26 0.05 260);
-  --accent-foreground: oklch(0.98 0.01 250);
-  --destructive: oklch(0.6 0.22 25);
-  --destructive-foreground: oklch(0.98 0.01 250);
-  --border: oklch(0.28 0.04 260 / 0.5);
-  --input: oklch(0.28 0.04 260 / 0.6);
-  --ring: oklch(0.68 0.18 45);
-  --sidebar: oklch(0.16 0.032 260);
-  --sidebar-foreground: oklch(0.96 0.015 250);
-  --sidebar-primary: oklch(0.68 0.18 45);
-  --sidebar-primary-foreground: oklch(0.98 0.01 60);
-  --sidebar-accent: oklch(0.24 0.045 260);
-  --sidebar-accent-foreground: oklch(0.98 0.01 250);
-  --sidebar-border: oklch(0.28 0.04 260 / 0.5);
-  --sidebar-ring: oklch(0.68 0.18 45);
 }
 
 @layer base {
@@ -167,34 +120,50 @@
   }
 
   body {
-    background-color: var(--color-background);
+    background-color: #0b0c10;
     color: var(--color-foreground);
     background-image:
-      radial-gradient(at 20% 20%, oklch(0.65 0.22 45 / 0.08) 0px, transparent 50%),
-      radial-gradient(at 80% 80%, oklch(0.75 0.16 160 / 0.08) 0px, transparent 50%);
+      radial-gradient(at 15% 15%, rgba(245, 158, 11, 0.08) 0px, transparent 55%),
+      radial-gradient(at 85% 85%, rgba(16, 185, 129, 0.08) 0px, transparent 55%),
+      radial-gradient(at 50% 50%, rgba(15, 23, 42, 0.6) 0px, transparent 100%);
     background-attachment: fixed;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 }
 
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 113, 108, 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 158, 11, 0.6);
+}
+
 /* Custom UI animations and effects */
 @keyframes piece-pulse {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 10px oklch(0.65 0.22 45 / 0.6));
+  0%, 100% {
+    filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.6));
   }
   50% {
-    filter: drop-shadow(0 0 22px oklch(0.85 0.2 65 / 0.9));
+    filter: drop-shadow(0 0 22px rgba(251, 191, 36, 0.95));
   }
 }
 
 @keyframes goat-pulse {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 10px oklch(0.75 0.16 160 / 0.6));
+  0%, 100% {
+    filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.6));
   }
   50% {
-    filter: drop-shadow(0 0 22px oklch(0.92 0.12 165 / 0.9));
+    filter: drop-shadow(0 0 22px rgba(52, 211, 153, 0.95));
   }
 }
 
@@ -204,4 +173,29 @@
 
 .goat-glow-effect {
   animation: goat-pulse 2.5s infinite ease-in-out;
+}
+
+.glass-card {
+  background: linear-gradient(135deg, rgba(28, 25, 23, 0.85) 0%, rgba(15, 23, 42, 0.8) 100%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-card-amber {
+  background: linear-gradient(135deg, rgba(45, 26, 10, 0.7) 0%, rgba(20, 15, 10, 0.8) 100%);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.glass-card-emerald {
+  background: linear-gradient(135deg, rgba(6, 40, 30, 0.7) 0%, rgba(10, 20, 15, 0.8) 100%);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.gold-shimmer-text {
+  background: linear-gradient(90deg, #fef08a 0%, #f59e0b 50%, #d97706 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }

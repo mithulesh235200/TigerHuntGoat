@@ -17,6 +17,9 @@ import {
   Check,
   Users,
   Share2,
+  Flame,
+  Target,
+  Zap,
 } from "lucide-react";
 
 export type GameMode = "goat-vs-ai" | "tiger-vs-ai" | "hotseat" | "online";
@@ -57,25 +60,29 @@ type Props = {
   onHint: () => void;
 };
 
-const modes: { id: GameMode; label: string; icon: React.ReactNode }[] = [
+const modes: { id: GameMode; label: string; sub: string; icon: React.ReactNode }[] = [
   {
     id: "goat-vs-ai",
     label: "Goats vs AI Tigers",
+    sub: "Defend with the herd",
     icon: <BrainCircuit className="h-4 w-4 text-amber-400" />,
   },
   {
     id: "tiger-vs-ai",
     label: "Tigers vs AI Goats",
+    sub: "Hunt with 3 tigers",
     icon: <Swords className="h-4 w-4 text-emerald-400" />,
   },
   {
     id: "hotseat",
-    label: "2 Players (Local)",
+    label: "Local 2 Players",
+    sub: "Pass & play hotseat",
     icon: <Gamepad2 className="h-4 w-4 text-sky-400" />,
   },
   {
     id: "online",
     label: "Online Room",
+    sub: "Play across devices",
     icon: <Share2 className="h-4 w-4 text-cyan-400" />,
   },
 ];
@@ -90,16 +97,21 @@ function Panel({
   title,
   icon,
   children,
+  badge,
 }: {
   title: string;
   icon?: React.ReactNode;
   children: React.ReactNode;
+  badge?: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-stone-800/80 bg-stone-900/80 p-4 backdrop-blur-xl shadow-xl transition-all duration-200 hover:border-stone-700/80">
-      <div className="mb-3 flex items-center gap-2">
-        {icon}
-        <h2 className="text-xs font-bold uppercase tracking-widest text-amber-400/90">{title}</h2>
+    <section className="glass-card rounded-3xl p-4 shadow-2xl transition-all duration-300 hover:border-amber-500/30">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {icon}
+          <h2 className="text-xs font-black uppercase tracking-[0.2em] text-amber-400/90">{title}</h2>
+        </div>
+        {badge}
       </div>
       {children}
     </section>
@@ -115,72 +127,96 @@ export function Sidebar(p: Props) {
     p.turnTimeLimit && p.turnTimeLeft !== undefined
       ? Math.max(0, (p.turnTimeLeft / p.turnTimeLimit) * 100)
       : 100;
+
   const timerColor =
     p.turnTimeLeft !== undefined && p.turnTimeLeft <= 8
-      ? "from-red-500 to-rose-500"
+      ? "from-rose-500 to-red-600"
       : p.turnTimeLeft !== undefined && p.turnTimeLeft <= 15
         ? "from-amber-500 to-orange-500"
-        : "from-emerald-500 to-teal-500";
+        : "from-emerald-500 to-teal-400";
 
   return (
-    <aside className="flex w-full flex-col gap-4 lg:max-w-sm">
-      {/* Game Status Banner */}
-      <Panel title="Live Match Status" icon={<Trophy className="h-4 w-4 text-amber-400" />}>
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-xl font-black text-stone-100">
-            {state.winner
-              ? state.winner === "tiger"
-                ? "🐯 Tigers Win!"
-                : "🐐 Goats Win!"
-              : state.turn === "goat"
-                ? "Goats to Move"
-                : "Tigers to Move"}
+    <aside className="flex w-full flex-col gap-4.5 lg:max-w-sm">
+      {/* Live Match Status Panel */}
+      <Panel
+        title="Live Match Status"
+        icon={<Trophy className="h-4 w-4 text-amber-400" />}
+        badge={
+          <span className="rounded-full border border-white/10 bg-stone-950/70 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-stone-400">
+            Session #{p.sessionCount ?? 1}
           </span>
+        }
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col">
+            <span className="text-2xl font-black text-stone-100">
+              {state.winner
+                ? state.winner === "tiger"
+                  ? "🐯 Tigers Win!"
+                  : "🐐 Goats Win!"
+                : state.turn === "goat"
+                  ? "Goats to Move"
+                  : "Tigers to Move"}
+            </span>
+            <span className="text-[11px] font-medium text-stone-400">
+              {state.goatsToPlace > 0
+                ? `Placement Phase (${state.goatsToPlace} goats left)`
+                : "Movement Phase (Full Grid)"}
+            </span>
+          </div>
+
           <span
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-extrabold tracking-wide uppercase shadow-lg ${
+            className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-black tracking-wider uppercase shadow-xl transition-transform hover:scale-105 ${
               state.turn === "tiger"
-                ? "bg-gradient-to-r from-amber-600 to-orange-600 text-amber-100 shadow-amber-900/40 ring-1 ring-amber-400/30"
-                : "bg-gradient-to-r from-emerald-600 to-teal-600 text-emerald-100 shadow-emerald-900/40 ring-1 ring-emerald-400/30"
+                ? "bg-gradient-to-r from-amber-600 to-orange-600 text-amber-100 shadow-amber-950/50 ring-1 ring-amber-400/40"
+                : "bg-gradient-to-r from-emerald-600 to-teal-600 text-emerald-100 shadow-emerald-950/50 ring-1 ring-emerald-400/40"
             }`}
           >
-            {state.turn === "tiger" ? "🐯 Tiger" : "🐐 Goat"}
+            {state.turn === "tiger" ? "🐯 Tiger Turn" : "🐐 Goat Turn"}
           </span>
         </div>
 
-        <div className="mt-3 rounded-xl bg-stone-950/70 p-3 ring-1 ring-white/5">
+        {/* Live Message & Thinking Bar */}
+        <div className="mt-3 rounded-2xl border border-white/5 bg-stone-950/80 p-3 shadow-inner">
           {p.thinking ? (
-            <div className="flex items-center gap-2.5 text-amber-400">
+            <div className="flex items-center gap-3 text-amber-400">
               <span className="relative flex h-3 w-3">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"></span>
                 <span className="relative inline-flex h-3 w-3 rounded-full bg-amber-500"></span>
               </span>
-              <span className="text-sm font-semibold">AI is analyzing moves...</span>
+              <span className="text-xs font-bold uppercase tracking-wider">
+                AI Minimax Engine Calculating Move...
+              </span>
             </div>
           ) : (
             <p
               aria-live="polite"
               aria-atomic="true"
-              className="text-sm font-medium leading-relaxed text-stone-300"
+              className="text-xs font-semibold leading-relaxed text-stone-200"
             >
               {p.status}
             </p>
           )}
         </div>
 
-        <div className="mt-3 rounded-xl bg-stone-950/60 p-3 ring-1 ring-white/5">
-          <div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400">
-            <span>Turn timer</span>
+        {/* Turn Timer Progress Bar */}
+        <div className="mt-3 rounded-2xl border border-white/5 bg-stone-950/70 p-3">
+          <div className="mb-1.5 flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400">
+            <span className="flex items-center gap-1">
+              <Zap className="h-3 w-3 text-amber-400" />
+              Turn Countdown
+            </span>
             <span
               className={
                 p.turnTimeLeft !== undefined && p.turnTimeLeft <= 8
-                  ? "text-red-300"
+                  ? "text-rose-400 font-extrabold animate-pulse"
                   : "text-stone-200"
               }
             >
-              {p.turnTimeLeft ?? 0}s
+              {p.turnTimeLeft ?? 0}s remaining
             </span>
           </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-stone-800">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-stone-900 shadow-inner">
             <div
               className={`h-full rounded-full bg-gradient-to-r ${timerColor} transition-all duration-500`}
               style={{ width: `${timerRatio}%` }}
@@ -188,45 +224,50 @@ export function Sidebar(p: Props) {
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-stone-300">
-          <div className="rounded-xl bg-stone-950/60 px-2.5 py-2 ring-1 ring-white/5">
-            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-500">
-              Legal moves
+        {/* Quick Analytics Summary */}
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <div className="rounded-2xl border border-white/5 bg-stone-950/70 p-2.5">
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">
+              Available Moves
             </div>
-            <div className="mt-1 text-lg font-black text-amber-300">{p.legalMovesCount ?? 0}</div>
+            <div className="mt-1 flex items-baseline gap-1 text-lg font-black text-amber-300">
+              <span>{p.legalMovesCount ?? 0}</span>
+              <span className="text-[10px] font-normal text-stone-500">legal options</span>
+            </div>
           </div>
 
-          <div className="rounded-xl bg-stone-950/60 px-2.5 py-2 ring-1 ring-white/5">
-            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-500">
-              Best move
+          <div className="rounded-2xl border border-white/5 bg-stone-950/70 p-2.5">
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">
+              Tactical Recommendation
             </div>
-            <div className="mt-1 line-clamp-2 text-[11px] font-semibold text-emerald-300">
-              {p.suggestedMove || "—"}
+            <div className="mt-1 line-clamp-1 text-xs font-black text-emerald-300">
+              {p.suggestedMove || "Analyzing..."}
             </div>
           </div>
         </div>
       </Panel>
 
-      <Panel title="AI Coach" icon={<Sparkles className="h-4 w-4 text-emerald-400" />}>
-        <p aria-live="polite" className="text-sm leading-relaxed text-stone-300">
-          {p.coachInsight || "Make a move to receive a tactical read of the position."}
-        </p>
+      {/* AI Tactical Coach Read */}
+      <Panel title="AI Tactical Coach" icon={<Sparkles className="h-4 w-4 text-emerald-400" />}>
+        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs leading-relaxed text-emerald-100">
+          {p.coachInsight || "Make a move to receive tactical insights."}
+        </div>
       </Panel>
 
-      {/* Match Progress Scoreboard */}
-      <Panel title="Battle Statistics" icon={<ShieldAlert className="h-4 w-4 text-amber-400" />}>
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          {/* Goats to Place */}
-          <div className="rounded-xl bg-stone-950/60 p-3 ring-1 ring-white/5">
-            <div className="flex items-center justify-between text-xs font-semibold text-stone-400">
-              <span>To Place</span>
-              <span className="text-emerald-400">{state.goatsToPlace} remaining</span>
+      {/* Battle Scoreboard Panel */}
+      <Panel title="Battle Scoreboard" icon={<ShieldAlert className="h-4 w-4 text-amber-400" />}>
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          {/* Goats Placement Progress */}
+          <div className="rounded-2xl border border-white/5 bg-stone-950/70 p-3">
+            <div className="flex items-center justify-between font-bold text-stone-400">
+              <span>Goats Placed</span>
+              <span className="text-emerald-400">{state.goatsToPlace} left</span>
             </div>
             <div className="mt-1 text-2xl font-black text-stone-100">
               {TOTAL_GOATS - state.goatsToPlace}{" "}
               <span className="text-xs font-normal text-stone-500">/ {TOTAL_GOATS}</span>
             </div>
-            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-stone-800">
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-stone-900">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500"
                 style={{ width: `${placementProgress}%` }}
@@ -234,17 +275,17 @@ export function Sidebar(p: Props) {
             </div>
           </div>
 
-          {/* Goats Captured */}
-          <div className="rounded-xl bg-stone-950/60 p-3 ring-1 ring-white/5">
-            <div className="flex items-center justify-between text-xs font-semibold text-stone-400">
-              <span>Captured</span>
+          {/* Goats Capture Progress */}
+          <div className="rounded-2xl border border-white/5 bg-stone-950/70 p-3">
+            <div className="flex items-center justify-between font-bold text-stone-400">
+              <span>Goats Captured</span>
               <span className="text-rose-400">{CAPTURES_TO_WIN - state.goatsCaptured} to win</span>
             </div>
             <div className="mt-1 text-2xl font-black text-rose-400">
               {state.goatsCaptured}{" "}
               <span className="text-xs font-normal text-stone-500">/ {CAPTURES_TO_WIN}</span>
             </div>
-            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-stone-800">
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-stone-900">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-rose-500 to-red-600 transition-all duration-500"
                 style={{ width: `${captureProgress}%` }}
@@ -252,126 +293,140 @@ export function Sidebar(p: Props) {
             </div>
           </div>
 
-          {/* Active Goats on Board */}
-          <div className="rounded-xl bg-stone-950/60 p-3 ring-1 ring-white/5">
-            <dt className="text-xs font-semibold text-stone-400">On Board</dt>
-            <dd className="mt-0.5 text-xl font-bold text-emerald-300">{goatsOnBoard} Goats</dd>
+          {/* Active Goats Count */}
+          <div className="rounded-2xl border border-white/5 bg-stone-950/70 p-2.5">
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-stone-400">
+              Herd On Grid
+            </div>
+            <div className="mt-0.5 text-base font-black text-emerald-300">{goatsOnBoard} Goats</div>
           </div>
 
-          {/* Match Phase */}
-          <div className="rounded-xl bg-stone-950/60 p-3 ring-1 ring-white/5">
-            <dt className="text-xs font-semibold text-stone-400">Phase</dt>
-            <dd className="mt-0.5 text-xl font-bold text-amber-300">
-              {state.goatsToPlace > 0 ? "Placement" : "Movement"}
-            </dd>
+          {/* Active Tigers Count */}
+          <div className="rounded-2xl border border-white/5 bg-stone-950/70 p-2.5">
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-stone-400">
+              Prowling Hunters
+            </div>
+            <div className="mt-0.5 text-base font-black text-amber-300">3 Tigers</div>
           </div>
         </div>
 
-        <div className="mt-3 rounded-xl bg-stone-950/60 p-3 ring-1 ring-white/5">
-          <div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">
-            <span>Match record</span>
-            <span className="text-amber-300">{p.matchStats?.games ?? 0} games</span>
+        {/* Career & Session Score Records */}
+        <div className="mt-3 rounded-2xl border border-white/5 bg-stone-950/70 p-3">
+          <div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400">
+            <span>Career Match Record</span>
+            <span className="text-amber-400">{p.matchStats?.games ?? 0} total games</span>
           </div>
-          <div className="mb-2 flex items-center justify-between rounded-lg border border-sky-500/20 bg-sky-500/5 px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-sky-200">
-            <span>Session</span>
-            <span>#{p.sessionCount ?? 1}</span>
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
-            <div className="rounded-lg bg-stone-950/60 px-2 py-2 ring-1 ring-white/5">
-              <div className="text-stone-500">Goats</div>
-              <div className="mt-1 text-base font-black text-emerald-300">
+
+          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-2">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                Goat Wins
+              </div>
+              <div className="mt-0.5 text-lg font-black text-stone-100">
                 {p.matchStats?.goatWins ?? 0}
               </div>
             </div>
-            <div className="rounded-lg bg-stone-950/60 px-2 py-2 ring-1 ring-white/5">
-              <div className="text-stone-500">Tigers</div>
-              <div className="mt-1 text-base font-black text-amber-300">
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-2">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                Tiger Wins
+              </div>
+              <div className="mt-0.5 text-lg font-black text-stone-100">
                 {p.matchStats?.tigerWins ?? 0}
               </div>
             </div>
-            <div className="rounded-lg bg-stone-950/60 px-2 py-2 ring-1 ring-white/5">
-              <div className="text-stone-500">Streak</div>
-              <div className="mt-1 text-base font-black text-sky-300">
-                {p.matchStats?.currentStreak ?? 0}
+            <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-2">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-sky-400">
+                Streak
+              </div>
+              <div className="mt-0.5 text-lg font-black text-stone-100">
+                {p.matchStats?.currentStreak ?? 0}🔥
               </div>
             </div>
           </div>
         </div>
       </Panel>
 
-      {/* Game Mode & AI Difficulty Controls */}
-      <Panel title="Game Setup" icon={<BrainCircuit className="h-4 w-4 text-amber-400" />}>
-        <div className="mb-3 flex items-center justify-between rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-200">
-          <span>Challenge</span>
+      {/* Game Mode & AI Setup Panel */}
+      <Panel title="Game Controls & AI" icon={<BrainCircuit className="h-4 w-4 text-amber-400" />}>
+        {/* Challenge Mode Banner */}
+        <div className="mb-3 flex items-center justify-between rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-orange-500/10 px-3.5 py-2">
+          <div className="flex items-center gap-2">
+            <Flame className="h-4 w-4 text-amber-400 animate-bounce" />
+            <span className="text-xs font-black uppercase tracking-wider text-amber-200">
+              Challenge Opening Rule
+            </span>
+          </div>
           <button
             type="button"
             onClick={() => p.onMode(p.mode)}
-            className={`rounded-full px-2.5 py-1 text-[9px] font-black ${
-              p.challengeMode ? "bg-amber-400 text-stone-950" : "bg-stone-800 text-stone-200"
+            className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider transition-all ${
+              p.challengeMode
+                ? "bg-amber-400 text-stone-950 shadow-md shadow-amber-950/40"
+                : "bg-stone-800 text-stone-300"
             }`}
           >
             {p.challengeMode ? "ON" : "OFF"}
           </button>
         </div>
-        <div className="flex flex-col gap-2">
+
+        {/* Mode Selector Cards */}
+        <div className="grid grid-cols-2 gap-2">
           {modes.map((m) => (
             <button
               key={m.id}
               onClick={() => p.onMode(m.id)}
-              className={`flex items-center justify-between rounded-xl px-3.5 py-2.5 text-left text-xs font-bold tracking-wide transition-all ${
+              className={`flex flex-col gap-1 rounded-2xl p-3 text-left transition-all ${
                 p.mode === m.id
-                  ? "bg-gradient-to-r from-amber-600 to-amber-700 text-stone-950 shadow-md shadow-amber-900/30 ring-1 ring-amber-400/50"
-                  : "bg-stone-950/60 text-stone-300 ring-1 ring-white/5 hover:bg-stone-800/60 hover:text-stone-100"
+                  ? "border border-amber-400/60 bg-gradient-to-br from-amber-500/20 to-orange-500/20 text-stone-100 shadow-lg ring-1 ring-amber-400/40"
+                  : "border border-white/5 bg-stone-950/60 text-stone-400 hover:border-white/20 hover:text-stone-200"
               }`}
             >
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2 font-bold text-xs">
                 {m.icon}
-                <span>{m.label}</span>
+                <span className={p.mode === m.id ? "text-amber-200" : ""}>{m.label}</span>
               </div>
-              {p.mode === m.id && <span className="h-2 w-2 rounded-full bg-stone-950" />}
+              <span className="text-[10px] font-medium opacity-75">{m.sub}</span>
             </button>
           ))}
         </div>
 
-        {/* AI Difficulty Pills */}
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          {levels.map((l) => (
-            <button
-              key={l.id}
-              onClick={() => p.onDifficulty(l.id)}
-              disabled={p.mode === "hotseat"}
-              className={`rounded-xl px-1 py-2 text-center transition-all disabled:opacity-30 ${
-                p.difficulty === l.id
-                  ? "bg-gradient-to-r from-amber-500 to-orange-500 text-stone-950 shadow-md shadow-amber-900/30"
-                  : "bg-stone-950/60 text-stone-400 ring-1 ring-white/5 hover:bg-stone-800/60 hover:text-stone-200"
-              }`}
-            >
-              <div className="text-[10px] font-black uppercase tracking-[0.18em]">{l.label}</div>
-              <div className="mt-0.5 text-[9px] font-semibold opacity-80">{l.note}</div>
-            </button>
-          ))}
+        {/* AI Difficulty Selector */}
+        <div className="mt-3">
+          <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400">
+            AI Minimax Difficulty
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {levels.map((l) => (
+              <button
+                key={l.id}
+                onClick={() => p.onDifficulty(l.id)}
+                disabled={p.mode === "hotseat"}
+                className={`rounded-xl py-2 px-1 text-center transition-all disabled:opacity-30 ${
+                  p.difficulty === l.id
+                    ? "bg-gradient-to-r from-amber-500 to-orange-500 text-stone-950 font-black shadow-md shadow-amber-950/50"
+                    : "bg-stone-950/70 border border-white/5 text-stone-400 hover:bg-stone-800 hover:text-stone-200"
+                }`}
+              >
+                <div className="text-[10px] uppercase tracking-wider">{l.label}</div>
+                <div className="text-[9px] opacity-80">{l.note}</div>
+              </button>
+            ))}
+          </div>
         </div>
       </Panel>
 
-      {/* Multiplayer room link */}
+      {/* Multiplayer Room Sharing Link Panel */}
       <Panel
-        title={p.mode === "online" ? "Online Room Invite" : "Local Hotseat Link"}
+        title={p.mode === "online" ? "Online Invite Code" : "Local Hotseat Invite"}
         icon={<Users className="h-4 w-4 text-sky-400" />}
       >
-        <div className="flex flex-col gap-2.5">
-          <p className="text-xs leading-relaxed text-stone-400">
-            {p.mode === "online"
-              ? `You are playing as ${p.onlineRole === "tiger" ? "Tigers" : "Goats"}. Send the link to your opponent.`
-              : "Use this link to reopen the same two-player setup on this device."}
-          </p>
-          <div className="flex items-center justify-between text-xs font-semibold text-stone-400">
-            <span>Match Room Code</span>
-            <span className="font-mono text-xs font-extrabold text-sky-400">
-              #{p.roomId || "MATCH"}
-            </span>
+        <div className="flex flex-col gap-2.5 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-stone-400">Match Code</span>
+            <span className="font-mono text-sm font-black text-sky-400">#{p.roomId || "MATCH"}</span>
           </div>
 
-          <div className="flex items-center gap-2 rounded-xl bg-stone-950/80 p-2 ring-1 ring-white/10">
+          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-stone-950/90 p-2.5">
             <LinkIcon className="h-4 w-4 shrink-0 text-stone-400" />
             <input
               type="text"
@@ -381,16 +436,16 @@ export function Sidebar(p: Props) {
                   ? `${window.location.origin}${window.location.pathname}?mode=${p.mode}&room=${p.roomId || "MATCH"}&role=tiger`
                   : `?mode=${p.mode}&room=${p.roomId || "MATCH"}&role=tiger`
               }
-              className="w-full bg-transparent font-mono text-xs text-stone-300 outline-none select-all"
+              className="w-full bg-transparent font-mono text-[11px] text-stone-300 outline-none select-all"
             />
           </div>
 
           <button
             onClick={p.onCopyInviteLink}
-            className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold transition-all shadow-md ${
+            className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 font-bold transition-all shadow-lg ${
               p.copied
                 ? "bg-emerald-500 text-stone-950 shadow-emerald-950/40"
-                : "bg-gradient-to-r from-sky-600 to-blue-600 text-stone-100 shadow-sky-900/30 hover:brightness-110 active:scale-95"
+                : "bg-gradient-to-r from-sky-600 to-blue-600 text-stone-100 hover:brightness-110 active:scale-95"
             }`}
           >
             {p.copied ? (
@@ -401,37 +456,41 @@ export function Sidebar(p: Props) {
             ) : (
               <>
                 <Copy className="h-4 w-4" />
-                <span>{p.mode === "online" ? "Copy Online Invite" : "Copy Local Match Link"}</span>
+                <span>{p.mode === "online" ? "Copy Online Invite Link" : "Copy Room Link"}</span>
               </>
             )}
           </button>
-
-          <div className="grid grid-cols-2 gap-2 pt-1 text-[11px] font-semibold text-stone-400">
-            <div className="flex items-center gap-1.5 rounded-lg bg-stone-950/50 px-2 py-1 ring-1 ring-white/5">
-              <span>🐐 P1: Goats</span>
-            </div>
-            <div className="flex items-center gap-1.5 rounded-lg bg-stone-950/50 px-2 py-1 ring-1 ring-white/5">
-              <span>🐯 P2: Tigers</span>
-            </div>
-          </div>
         </div>
       </Panel>
 
-      {/* Scrollable Move History Log */}
-      <Panel title="Move Feed" icon={<History className="h-4 w-4 text-amber-400" />}>
-        <ol className="flex max-h-44 flex-col-reverse gap-1.5 overflow-y-auto pr-1 text-xs text-stone-300 scrollbar-thin scrollbar-thumb-stone-700">
+      {/* Move History Feed Panel */}
+      <Panel title="Move Feed History" icon={<History className="h-4 w-4 text-amber-400" />}>
+        <ol className="flex max-h-40 flex-col-reverse gap-1.5 overflow-y-auto pr-1 text-xs text-stone-300">
           {p.log.length === 0 && (
-            <li className="py-2 text-center text-stone-500 italic">No moves recorded yet</li>
-          )}
-          {p.log.map((entry, i) => (
-            <li
-              key={i}
-              className="flex items-center justify-between rounded-lg bg-stone-950/60 px-3 py-1.5 ring-1 ring-white/5 hover:bg-stone-800/50"
-            >
-              <span className="font-mono text-stone-500">#{p.log.length - i}</span>
-              <span className="font-medium text-stone-200">{entry}</span>
+            <li className="py-3 text-center font-medium italic text-stone-500">
+              No moves recorded yet. Place the first goat!
             </li>
-          ))}
+          )}
+          {p.log.map((entry, i) => {
+            const isCapture = entry.includes("captured");
+            const isPlacement = entry.includes("placed");
+
+            return (
+              <li
+                key={i}
+                className={`flex items-center justify-between rounded-xl border px-3 py-1.5 transition-all ${
+                  isCapture
+                    ? "border-rose-500/30 bg-rose-500/10 text-rose-200"
+                    : isPlacement
+                      ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-200"
+                      : "border-white/5 bg-stone-950/60 text-stone-300 hover:bg-stone-900"
+                }`}
+              >
+                <span className="font-mono text-[10px] font-bold opacity-60">#{p.log.length - i}</span>
+                <span className="font-medium">{entry}</span>
+              </li>
+            );
+          })}
         </ol>
       </Panel>
 
@@ -439,7 +498,7 @@ export function Sidebar(p: Props) {
       <div className="grid grid-cols-2 gap-2.5">
         <button
           onClick={p.onNewGame}
-          className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2.5 text-xs font-bold tracking-wider text-stone-950 shadow-lg shadow-amber-900/30 transition-transform active:scale-95 hover:brightness-110"
+          className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-3 text-xs font-black uppercase tracking-wider text-stone-950 shadow-xl shadow-amber-950/40 transition-all hover:scale-[1.02] active:scale-95"
         >
           <RotateCcw className="h-4 w-4" />
           <span>New Game</span>
@@ -448,16 +507,16 @@ export function Sidebar(p: Props) {
         <button
           onClick={p.onHint}
           disabled={!p.canHint}
-          className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2.5 text-xs font-bold tracking-wider text-emerald-950 shadow-lg shadow-emerald-950/40 transition-transform active:scale-95 disabled:opacity-30 hover:brightness-110"
+          className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-3 text-xs font-black uppercase tracking-wider text-emerald-950 shadow-xl shadow-emerald-950/40 transition-all disabled:opacity-30 hover:scale-[1.02] active:scale-95"
         >
-          <Sparkles className="h-4 w-4 text-emerald-200" />
+          <Sparkles className="h-4 w-4 text-emerald-100" />
           <span className="text-emerald-100">Tactical Hint</span>
         </button>
 
         <button
           onClick={p.onUndo}
           disabled={!p.canUndo}
-          className="flex items-center justify-center gap-2 rounded-xl bg-stone-900 px-4 py-2.5 text-xs font-bold tracking-wider text-stone-200 ring-1 ring-stone-800 transition-all disabled:opacity-30 hover:bg-stone-800"
+          className="flex items-center justify-center gap-2 rounded-2xl border border-stone-800 bg-stone-900/90 px-4 py-3 text-xs font-bold tracking-wider text-stone-200 transition-all disabled:opacity-30 hover:bg-stone-800 active:scale-95"
         >
           <Undo2 className="h-4 w-4 text-amber-400" />
           <span>Undo</span>
@@ -465,7 +524,7 @@ export function Sidebar(p: Props) {
 
         <button
           onClick={p.onToggleMute}
-          className="flex items-center justify-center gap-2 rounded-xl bg-stone-900 px-4 py-2.5 text-xs font-bold tracking-wider text-stone-200 ring-1 ring-stone-800 transition-all hover:bg-stone-800"
+          className="flex items-center justify-center gap-2 rounded-2xl border border-stone-800 bg-stone-900/90 px-4 py-3 text-xs font-bold tracking-wider text-stone-200 transition-all hover:bg-stone-800 active:scale-95"
         >
           {p.muted ? (
             <VolumeX className="h-4 w-4 text-rose-400" />
