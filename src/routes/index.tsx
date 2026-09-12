@@ -328,14 +328,22 @@ function Page() {
   const state = history[history.length - 1];
   const challengeOpeningNodes = new Set([10, 11, 12, 13, 14, 15, 16, 17, 18]);
   const humanSide: Side | null =
-    mode === "goat-vs-ai" || (mode === "online" && onlineRole === "goat")
+    mode === "goat-vs-ai"
       ? "goat"
-      : mode === "tiger-vs-ai" || (mode === "online" && onlineRole === "tiger")
+      : mode === "tiger-vs-ai"
         ? "tiger"
-        : null;
+        : mode === "online"
+          ? onlineRole
+          : null;
+
   const aiSide: Side | null =
-    humanSide === "goat" ? "tiger" : humanSide === "tiger" ? "goat" : null;
-  const isAiTurn = !state.winner && aiSide === state.turn;
+    mode === "goat-vs-ai"
+      ? "tiger"
+      : mode === "tiger-vs-ai"
+        ? "goat"
+        : null;
+
+  const isAiTurn = !state.winner && aiSide !== null && aiSide === state.turn;
   const isRemoteTurn = mode === "online" && state.turn !== onlineRole;
   const turnMoves = legalMoves(state);
   const captureMoves = turnMoves.filter((move) => move.kind === "capture");
