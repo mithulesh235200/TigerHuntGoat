@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { EDGES, LABELS, POINTS } from "@/lib/game/board";
 import type { GameState, Move } from "@/lib/game/engine";
+import { TigerFaceArt } from "@/components/game/TigerFace";
 import { useLang } from "@/lib/i18n";
 import { prefersReducedMotion } from "@/lib/device";
 
@@ -476,102 +477,9 @@ export function GameBoard({
 
                     {/* Inner Artwork Emblem */}
                     {cell === "tiger" ? (
-                      /* Realistic Tiger Face Emblem */
-                      <g
-                        transform={`translate(${px(i)}, ${py(i)})`}
-                        className="stroke-amber-950"
-                        strokeWidth={2.2}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        {/* Ears */}
-                        <path
-                          d="M -18 -10 L -26 -28 L -6 -16 Z"
-                          fill="#c2410c"
-                          stroke="#7c2d12"
-                          strokeWidth={1.5}
-                        />
-                        <path
-                          d="M 18 -10 L 26 -28 L 6 -16 Z"
-                          fill="#c2410c"
-                          stroke="#7c2d12"
-                          strokeWidth={1.5}
-                        />
-                        <path d="M -18 -13 L -22 -24 L -10 -16 Z" fill="#fdba74" stroke="none" />
-                        <path d="M 18 -13 L 22 -24 L 10 -16 Z" fill="#fdba74" stroke="none" />
-                        {/* Head */}
-                        <circle r={19} fill="#f59e0b" stroke="#9a3412" strokeWidth={2} />
-                        <ellipse
-                          cx={0}
-                          cy={11}
-                          rx={12}
-                          ry={7}
-                          fill="#fdba74"
-                          stroke="none"
-                          opacity={0.55}
-                        />
-                        {/* Forehead stripes */}
-                        <path d="M 0 -19 L 0 -11" stroke="#451a03" strokeWidth={3} />
-                        <path d="M -9 -17 L -5 -10" stroke="#451a03" strokeWidth={3} />
-                        <path d="M 9 -17 L 5 -10" stroke="#451a03" strokeWidth={3} />
-                        {/* Cheek stripes */}
-                        <path d="M -17 -4 L -11 -3" stroke="#451a03" strokeWidth={2.5} />
-                        <path d="M 17 -4 L 11 -3" stroke="#451a03" strokeWidth={2.5} />
-                        <path d="M -17 4 L -11 3" stroke="#451a03" strokeWidth={2.5} />
-                        <path d="M 17 4 L 11 3" stroke="#451a03" strokeWidth={2.5} />
-                        {/* Eyes (amber iris, round pupil, highlight) */}
-                        <ellipse
-                          cx={-7.5}
-                          cy={-2}
-                          rx={4.6}
-                          ry={3.6}
-                          fill="#fff7ed"
-                          stroke="#451a03"
-                          strokeWidth={1.2}
-                        />
-                        <ellipse
-                          cx={7.5}
-                          cy={-2}
-                          rx={4.6}
-                          ry={3.6}
-                          fill="#fff7ed"
-                          stroke="#451a03"
-                          strokeWidth={1.2}
-                        />
-                        <circle cx={-7.5} cy={-2} r={2.5} fill="#b45309" stroke="none" />
-                        <circle cx={7.5} cy={-2} r={2.5} fill="#b45309" stroke="none" />
-                        <ellipse cx={-7.5} cy={-2} rx={1} ry={1.7} fill="#1c1917" stroke="none" />
-                        <ellipse cx={7.5} cy={-2} rx={1} ry={1.7} fill="#1c1917" stroke="none" />
-                        <circle cx={-6.7} cy={-2.8} r={0.7} fill="#ffffff" stroke="none" />
-                        <circle cx={8.3} cy={-2.8} r={0.7} fill="#ffffff" stroke="none" />
-                        {/* Muzzle */}
-                        <ellipse cx={0} cy={8.5} rx={10} ry={7} fill="#fff7ed" stroke="none" />
-                        {/* Nose + mouth */}
-                        <path
-                          d="M -4 5 L 4 5 L 0 9.5 Z"
-                          fill="#7c2d12"
-                          stroke="#451a03"
-                          strokeWidth={1}
-                        />
-                        <path
-                          d="M 0 9.5 L 0 12 M 0 12 Q -1 14.5 -4.5 14 M 0 12 Q 1 14.5 4.5 14"
-                          fill="none"
-                          stroke="#451a03"
-                          strokeWidth={1.6}
-                        />
-                        {/* Whiskers + dots */}
-                        <circle cx={-8} cy={8} r={0.8} fill="#a8a29e" stroke="none" />
-                        <circle cx={-10} cy={10.5} r={0.8} fill="#a8a29e" stroke="none" />
-                        <circle cx={-8} cy={13} r={0.8} fill="#a8a29e" stroke="none" />
-                        <circle cx={8} cy={8} r={0.8} fill="#a8a29e" stroke="none" />
-                        <circle cx={10} cy={10.5} r={0.8} fill="#a8a29e" stroke="none" />
-                        <circle cx={8} cy={13} r={0.8} fill="#a8a29e" stroke="none" />
-                        <path
-                          d="M -9 9 L -18 7 M -9 11.5 L -18 12.5 M 9 9 L 18 7 M 9 11.5 L 18 12.5"
-                          stroke="#e7e5e4"
-                          strokeWidth={1}
-                          opacity={0.9}
-                        />
+                      /* Cute tiger face — the app's single tiger look */
+                      <g transform={`translate(${px(i)}, ${py(i)})`}>
+                        <TigerFaceArt />
                       </g>
                     ) : (
                       /* Realistic Goat Face Emblem */

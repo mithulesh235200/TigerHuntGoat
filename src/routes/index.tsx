@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { GameBoard } from "@/components/game/GameBoard";
+import { TigerFaceMark } from "@/components/game/TigerFace";
 import { Confetti } from "@/components/game/Confetti";
 import { PwaBadges } from "@/components/game/PwaBadges";
 import { ThemePicker } from "@/components/game/ThemePicker";
@@ -839,8 +840,8 @@ function Page() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
           {/* Logo & Subtitle */}
           <div className="flex items-center gap-3">
-            <div className="t-icon-tile flex h-10 w-10 animate-float items-center justify-center rounded-2xl text-xl">
-              🐯
+            <div className="t-icon-tile flex h-10 w-10 animate-float items-center justify-center rounded-2xl">
+              <TigerFaceMark size={30} />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -1143,9 +1144,12 @@ function Page() {
               {t.victoryKicker}
             </div>
 
-            <h3 className="t-text-gradient mt-5 text-3xl font-black">
-              {state.winner === "tiger" ? t.tigerWins : t.goatWins}
-            </h3>
+            <div className="flex flex-col items-center gap-1">
+              {state.winner === "tiger" && <TigerFaceMark size={64} />}
+              <h3 className="t-text-gradient mt-2 text-3xl font-black">
+                {state.winner === "tiger" ? t.tigerWins : t.goatWins}
+              </h3>
+            </div>
 
             <p className="mt-3 text-xs leading-relaxed text-stone-300">
               {state.winner === "tiger" ? t.tigerWinsDesc : t.goatWinsDesc}
@@ -1200,6 +1204,34 @@ function Page() {
       <div className="mx-auto max-w-7xl px-4 pt-6 lg:px-8">
         <div className="flex flex-col items-center gap-8 lg:flex-row lg:items-start lg:justify-between">
           <div className="rise flex w-full flex-1 flex-col items-center justify-center">
+            {/* Tactical Hint — on top of the board */}
+            <div className="glass-card t-panel mb-3 flex w-full max-w-[620px] items-center gap-3 rounded-2xl border p-3 shadow-xl">
+              <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl t-icon-tile">
+                <Sparkles className="h-4 w-4 t-accent-text" />
+                {!state.winner && (
+                  <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="t-panel-title flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em]">
+                  {t.tacRec}
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                </div>
+                <div
+                  key={thinking ? "thinking" : suggestedMoveText.slice(0, 32)}
+                  className="status-flash truncate text-xs font-bold text-stone-200"
+                >
+                  {thinking ? t.thinking : suggestedMoveText}
+                </div>
+              </div>
+              <button
+                onClick={showHint}
+                disabled={!!state.winner || thinking || isAiTurn || viewingIndex != null}
+                className="t-btn-primary shrink-0 rounded-xl px-4 py-2 text-[11px] font-black uppercase tracking-wider transition-all disabled:opacity-30 hover:scale-105 hover:brightness-110 active:scale-95"
+              >
+                {t.hintBtn}
+              </button>
+            </div>
             <GameBoard
               state={boardState}
               selected={viewingIndex == null ? selected : null}
@@ -1218,27 +1250,6 @@ function Page() {
               turnTimeLimit={timeoutSecs}
               onNodeClick={handleNode}
             />
-            {/* Tactical Hint — beside the board */}
-            <div className="glass-card t-panel mt-3 flex w-full max-w-[620px] items-center gap-3 rounded-2xl p-3">
-              <div className="t-icon-tile flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
-                <Sparkles className="h-4 w-4 t-accent-text" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="t-panel-title text-[10px] font-black uppercase tracking-[0.2em]">
-                  {t.tacRec}
-                </div>
-                <div className="truncate text-xs font-bold text-stone-200">
-                  {thinking ? t.thinking : suggestedMoveText}
-                </div>
-              </div>
-              <button
-                onClick={showHint}
-                disabled={!!state.winner || thinking || isAiTurn || viewingIndex != null}
-                className="t-btn-primary shrink-0 rounded-xl px-4 py-2 text-[11px] font-black uppercase tracking-wider transition-all disabled:opacity-30 hover:scale-105 active:scale-95"
-              >
-                {t.hintBtn}
-              </button>
-            </div>
           </div>
 
           <Sidebar

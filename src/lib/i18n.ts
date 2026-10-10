@@ -166,6 +166,9 @@ const en = {
   replayLoaded: "Shared replay loaded. Step through the moves!",
 
   tourKicker: "Interactive Tour",
+  expandAll: "Expand all",
+  collapseAll: "Collapse",
+  jumpTo: "Jump to panel",
   tourTitle: "Learn the Hunt in 2 Minutes",
   tourNext: "Next",
   tourBack: "Back",
@@ -402,6 +405,9 @@ const ta: Strings = {
   replayLoaded: "பகிர்ந்த மறுபார்வை ஏற்றப்பட்டது. நகர்வுகளைப் பாருங்கள்!",
 
   tourKicker: "பயிற்சி சுற்றுலா",
+  expandAll: "அனைத்தையும் விரி",
+  collapseAll: "சுருக்கு",
+  jumpTo: "பலகைக்குச் செல்",
   tourTitle: "2 நிமிடத்தில் வேட்டையைக் கற்க",
   tourNext: "அடுத்து",
   tourBack: "முன்",

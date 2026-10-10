@@ -1,4 +1,5 @@
 import { CAPTURES_TO_WIN, TOTAL_GOATS, type GameState } from "@/lib/game/engine";
+import { TigerFaceMark } from "@/components/game/TigerFace";
 import type { Difficulty } from "@/lib/game/ai";
 import type { ThemeId } from "@/lib/theme";
 import { ThemePicker } from "@/components/game/ThemePicker";
@@ -103,6 +104,7 @@ function Panel({
   icon,
   children,
   badge,
+  preview,
   defaultOpen = true,
 }: {
   id: string;
@@ -110,12 +112,14 @@ function Panel({
   icon?: React.ReactNode;
   children: React.ReactNode;
   badge?: React.ReactNode;
+  preview?: React.ReactNode;
   defaultOpen?: boolean;
 }) {
+  const STORAGE_KEY = "aadu-puli-panels-collapsed-v2";
   const [open, setOpen] = useState<boolean>(() => {
     if (typeof window === "undefined" || typeof localStorage === "undefined") return defaultOpen;
     try {
-      const raw = localStorage.getItem("aadu-puli-panels-collapsed");
+      const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return defaultOpen;
       const collapsed = JSON.parse(raw) as string[];
       return Array.isArray(collapsed) ? !collapsed.includes(id) : defaultOpen;
@@ -124,38 +128,86 @@ function Panel({
     }
   });
 
+  const persist = (next: boolean) => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const collapsed = raw ? (JSON.parse(raw) as string[]) : [];
+      const set = new Set(Array.isArray(collapsed) ? collapsed : []);
+      if (next) set.delete(id);
+      else set.add(id);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([...set]));
+    } catch {
+      // ignore persistence errors
+    }
+  };
+
   const toggle = () => {
     setOpen((v) => {
       const next = !v;
-      try {
-        const raw = localStorage.getItem("aadu-puli-panels-collapsed");
-        const collapsed = raw ? (JSON.parse(raw) as string[]) : [];
-        const set = new Set(Array.isArray(collapsed) ? collapsed : []);
-        if (next) set.delete(id);
-        else set.add(id);
-        localStorage.setItem("aadu-puli-panels-collapsed", JSON.stringify([...set]));
-      } catch {
-        // ignore persistence errors
-      }
+      persist(next);
       return next;
     });
   };
 
+  // Respond to sidebar quick-nav: open one panel / expand-or-collapse all.
+  useEffect(() => {
+    const openOne = (e: Event) => {
+      const detail = (e as CustomEvent<{ id: string }>).detail;
+      if (detail?.id !== id) return;
+      setOpen(true);
+      persist(true);
+    };
+    const setAll = (e: Event) => {
+      const detail = (e as CustomEvent<{ open: boolean }>).detail;
+      setOpen(!!detail?.open);
+      persist(!!detail?.open);
+    };
+    window.addEventListener("aadu-panel:open", openOne);
+    window.addEventListener("aadu-panels:set-all", setAll);
+    return () => {
+      window.removeEventListener("aadu-panel:open", openOne);
+      window.removeEventListener("aadu-panels:set-all", setAll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
   return (
-    <section className="glass-card t-panel rounded-3xl p-4 shadow-2xl transition-all duration-300">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {icon}
-          <h2 className="t-panel-title text-xs font-black uppercase tracking-[0.2em]">{title}</h2>
-        </div>
-        <div className="flex items-center gap-2">
+    <section
+      id={`panel-${id}`}
+      className={`glass-card t-panel group scroll-mt-24 rounded-3xl p-4 shadow-2xl transition-all duration-300 hover:border-white/20 hover:shadow-black/50 ${
+        open ? "ring-1 ring-white/5" : "cursor-pointer"
+      }`}
+      onClick={open ? undefined : toggle}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={open}
+          className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+        >
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-stone-950/60 transition-transform group-hover:scale-110">
+            {icon}
+          </span>
+          <span className="min-w-0 flex-1">
+            <h2 className="t-panel-title truncate text-xs font-black uppercase tracking-[0.2em]">
+              {title}
+            </h2>
+            {!open && preview ? (
+              <span className="mt-0.5 block truncate text-[11px] font-semibold normal-case tracking-normal text-stone-400">
+                {preview}
+              </span>
+            ) : null}
+          </span>
+        </button>
+        <div className="flex shrink-0 items-center gap-2">
           {badge}
           <button
             type="button"
             onClick={toggle}
             aria-expanded={open}
             aria-label={open ? `Collapse ${title}` : `Expand ${title}`}
-            className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-stone-400 transition-all hover:bg-stone-800 hover:text-white"
+            className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-stone-400 transition-all hover:bg-stone-800 hover:text-white active:scale-90"
           >
             <ChevronDown
               className={`h-4 w-4 transition-transform duration-300 ${open ? "" : "-rotate-90"}`}
@@ -163,9 +215,34 @@ function Panel({
           </button>
         </div>
       </div>
-      {open && <div className="mt-3">{children}</div>}
+      <div
+        className={`grid transition-all duration-300 ease-in-out ${
+          open ? "mt-3 grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+        }`}
+      >
+        <div className="overflow-hidden">{children}</div>
+      </div>
     </section>
   );
+}
+
+function jumpToPanel(id: string) {
+  try {
+    window.dispatchEvent(new CustomEvent("aadu-panel:open", { detail: { id } }));
+  } catch {
+    // ignore
+  }
+  requestAnimationFrame(() => {
+    document.getElementById(`panel-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
+
+function setAllPanels(open: boolean) {
+  try {
+    window.dispatchEvent(new CustomEvent("aadu-panels:set-all", { detail: { open } }));
+  } catch {
+    // ignore
+  }
 }
 
 function ConnectionDot() {
@@ -232,12 +309,114 @@ export function Sidebar(p: Props) {
         : "from-emerald-500 to-teal-400";
 
   return (
-    <aside className="rise rise-1 flex w-full flex-col gap-4.5 lg:max-w-sm">
+    <aside className="rise rise-1 flex w-full flex-col gap-3 lg:sticky lg:top-[72px] lg:max-h-[calc(100vh-88px)] lg:max-w-sm lg:overflow-y-auto lg:overscroll-contain lg:pr-1 lg:pb-2">
+      {/* Compact interactive navigator: jump to any panel + collapse all */}
+      <nav
+        aria-label={t.jumpTo}
+        className="glass-card t-panel sticky top-0 z-10 flex items-center gap-1.5 rounded-2xl p-2 shadow-xl backdrop-blur-xl"
+      >
+        <div className="flex flex-1 items-center gap-1 overflow-x-auto">
+          {[
+            {
+              id: "status",
+              icon: <Trophy className="h-3.5 w-3.5" />,
+              label: t.liveStatus,
+              dot: !state.winner
+                ? state.turn === "tiger"
+                  ? "bg-amber-400"
+                  : "bg-emerald-400"
+                : undefined,
+            },
+            { id: "coach", icon: <Sparkles className="h-3.5 w-3.5" />, label: t.coachTitle },
+            {
+              id: "scoreboard",
+              icon: <ShieldAlert className="h-3.5 w-3.5" />,
+              label: t.scoreboard,
+            },
+            {
+              id: "controls",
+              icon: <BrainCircuit className="h-3.5 w-3.5" />,
+              label: t.controlsTitle,
+            },
+            { id: "invite", icon: <Users className="h-3.5 w-3.5" />, label: t.inviteLocal },
+            {
+              id: "history",
+              icon: <History className="h-3.5 w-3.5" />,
+              label: t.history,
+              count: p.log.length,
+            },
+          ].map((n) => (
+            <button
+              key={n.id}
+              type="button"
+              title={n.label}
+              aria-label={n.label}
+              onClick={() => jumpToPanel(n.id)}
+              className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/5 bg-stone-950/60 text-stone-400 transition-all hover:scale-110 hover:border-white/20 hover:text-stone-100 active:scale-95"
+            >
+              {n.icon}
+              {"dot" in n && n.dot ? (
+                <span
+                  className={`absolute right-1 top-1 h-1.5 w-1.5 rounded-full ${n.dot} animate-pulse`}
+                />
+              ) : null}
+              {"count" in n && n.count ? (
+                <span
+                  key={n.count}
+                  className="feed-enter absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--a1)] px-1 text-[9px] font-black text-stone-950"
+                >
+                  {n.count > 99 ? "99+" : n.count}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+        <div className="flex shrink-0 items-center gap-1 border-l border-white/10 pl-1.5">
+          <button
+            type="button"
+            title={t.expandAll}
+            onClick={() => setAllPanels(true)}
+            className="rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-wider text-stone-400 transition-all hover:bg-stone-800 hover:text-white"
+          >
+            {t.expandAll}
+          </button>
+          <span className="text-stone-600">·</span>
+          <button
+            type="button"
+            title={t.collapseAll}
+            onClick={() => setAllPanels(false)}
+            className="rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-wider text-stone-400 transition-all hover:bg-stone-800 hover:text-white"
+          >
+            {t.collapseAll}
+          </button>
+        </div>
+      </nav>
+
       {/* Live Match Status Panel */}
       <Panel
         id="status"
         title={t.liveStatus}
-        icon={<Trophy className="h-4 w-4 t-accent-text" />}
+        icon={
+          <span className="relative flex">
+            <Trophy className="h-4 w-4 t-accent-text" />
+            {!state.winner && (
+              <span
+                className={`absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full ring-2 ring-stone-950 ${
+                  state.turn === "tiger"
+                    ? "bg-amber-400 animate-pulse"
+                    : "bg-emerald-400 animate-pulse"
+                }`}
+              />
+            )}
+          </span>
+        }
+        preview={
+          state.winner
+            ? state.winner === "tiger"
+              ? t.tigerWins
+              : t.goatWins
+            : `${state.turn === "goat" ? t.goatTurn : t.tigerTurn} · ${p.turnTimeLeft ?? 0}s · ${p.legalMovesCount ?? 0} ${t.legalOptions}`
+        }
         badge={
           <span className="rounded-full border border-white/10 bg-stone-950/70 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-stone-400">
             {t.session}
@@ -270,7 +449,8 @@ export function Sidebar(p: Props) {
                 : "bg-gradient-to-r from-emerald-600 to-teal-600 text-emerald-100 shadow-emerald-950/50 ring-1 ring-emerald-400/40"
             }`}
           >
-            {state.turn === "tiger" ? t.tigerTurn : t.goatTurn}
+            {state.turn === "tiger" && <TigerFaceMark size={18} />}
+            {state.turn === "tiger" ? t.tigerTurn.replace("🐯 ", "").replace("🐯", "") : t.goatTurn}
           </span>
         </div>
 
@@ -338,8 +518,12 @@ export function Sidebar(p: Props) {
         id="coach"
         title={t.coachTitle}
         icon={<Sparkles className="h-4 w-4 text-emerald-400" />}
+        preview={p.coachInsight}
       >
-        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs leading-relaxed text-emerald-100">
+        <div
+          key={p.coachInsight?.slice(0, 24)}
+          className="status-flash rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs leading-relaxed text-emerald-100"
+        >
           {p.coachInsight}
         </div>
       </Panel>
@@ -347,8 +531,10 @@ export function Sidebar(p: Props) {
       {/* Battle Scoreboard Panel */}
       <Panel
         id="scoreboard"
+        defaultOpen={false}
         title={t.scoreboard}
         icon={<ShieldAlert className="h-4 w-4 t-accent-text" />}
+        preview={`🐐 ${TOTAL_GOATS - state.goatsToPlace}/${TOTAL_GOATS} · 🐯 ${state.goatsCaptured}/${CAPTURES_TO_WIN}`}
       >
         <div className="grid grid-cols-2 gap-3 text-xs">
           {/* Goats Placement Progress */}
@@ -406,7 +592,10 @@ export function Sidebar(p: Props) {
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-stone-400">
               {t.hunters}
             </div>
-            <div className="mt-0.5 text-base font-black text-amber-300">{t.tigersUnit}</div>
+            <div className="mt-0.5 flex items-center gap-1.5 text-base font-black text-amber-300">
+              <TigerFaceMark size={20} />
+              {t.tigersUnit}
+            </div>
           </div>
         </div>
 
@@ -454,6 +643,7 @@ export function Sidebar(p: Props) {
         defaultOpen={false}
         title={t.analyticsTitle}
         icon={<BarChart3 className="h-4 w-4 t-accent-text" />}
+        preview={t.totalGames.replace("{n}", String(p.matchStats?.games ?? 0))}
       >
         <StatsCharts records={p.records} />
       </Panel>
@@ -461,8 +651,10 @@ export function Sidebar(p: Props) {
       {/* Game Mode & AI Setup Panel */}
       <Panel
         id="controls"
+        defaultOpen={false}
         title={t.controlsTitle}
         icon={<BrainCircuit className="h-4 w-4 t-accent-text" />}
+        preview={`${modes.find((m) => m.id === p.mode)?.label ?? p.mode} · ${levels.find((l) => l.id === p.difficulty)?.label ?? p.difficulty}`}
       >
         {/* Challenge Mode Banner */}
         <div className="t-chip mb-3 flex items-center justify-between rounded-2xl px-3.5 py-2">
@@ -581,8 +773,10 @@ export function Sidebar(p: Props) {
       {/* Multiplayer Room Sharing Link Panel */}
       <Panel
         id="invite"
+        defaultOpen={false}
         title={p.mode === "online" ? t.inviteOnline : t.inviteLocal}
         icon={<Users className="h-4 w-4 text-sky-400" />}
+        preview={`#${p.roomId || "MATCH"} · ${p.mode === "online" ? t.modeOnline : t.modeLocal}`}
         badge={<ConnectionDot />}
       >
         <div className="flex flex-col gap-2.5 text-xs">
@@ -631,7 +825,29 @@ export function Sidebar(p: Props) {
       </Panel>
 
       {/* Move History Feed Panel */}
-      <Panel id="history" title={t.history} icon={<History className="h-4 w-4 t-accent-text" />}>
+      <Panel
+        id="history"
+        defaultOpen={false}
+        title={t.history}
+        icon={<History className="h-4 w-4 t-accent-text" />}
+        preview={p.log.length > 0 ? p.log[p.log.length - 1] : t.noMoves}
+        badge={
+          p.log.length > 0 ? (
+            <button
+              key={p.log.length}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                jumpToPanel("history");
+              }}
+              title={t.history}
+              className="feed-enter t-chip rounded-full px-2 py-0.5 text-[10px] font-black tabular-nums"
+            >
+              {p.log.length}
+            </button>
+          ) : undefined
+        }
+      >
         {/* Replay stepper */}
         {p.replayTotal > 0 && (
           <div className="mb-2.5 flex items-center gap-1.5 rounded-xl border border-white/10 bg-stone-950/70 p-1.5">
@@ -705,8 +921,8 @@ export function Sidebar(p: Props) {
         </ol>
       </Panel>
 
-      {/* Action Controls Toolbar */}
-      <div className="grid grid-cols-2 gap-2.5">
+      {/* Action Controls Toolbar — sticky so New/Undo are always reachable */}
+      <div className="sticky bottom-0 z-10 grid grid-cols-2 gap-2.5 rounded-2xl bg-transparent pt-1 pb-1 backdrop-blur-sm">
         <button
           onClick={p.onNewGame}
           className="t-btn-primary flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wider transition-all hover:scale-[1.02] active:scale-95"
