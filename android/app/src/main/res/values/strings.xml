@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Aadu Puli Aatam</string>
+    <string name="title_activity_main">Aadu Puli Aatam</string>
+    <string name="package_name">com.aadupuli.aatam</string>
+    <string name="custom_url_scheme">com.aadupuli.aatam</string>
+</resources>

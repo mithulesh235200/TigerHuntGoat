@@ -1,5 +1,6 @@
 import { EDGES, LABELS, POINTS } from "@/lib/game/board";
 import type { GameState, Move } from "@/lib/game/engine";
+import { useLang } from "@/lib/i18n";
 
 const PAD = 52;
 const STEP = 96;
@@ -32,6 +33,7 @@ export function GameBoard({
   turnTimeLimit,
   onNodeClick,
 }: Props) {
+  const { t } = useLang();
   const targetMap = new Map(targets.map((m) => [m.to, m]));
   const lastFrom = lastMove && lastMove.kind !== "place" ? lastMove.from : null;
   const lastTo = lastMove ? lastMove.to : null;
@@ -40,12 +42,12 @@ export function GameBoard({
 
   const moveTypeLabel =
     lastMove?.kind === "capture"
-      ? "Tactical Capture"
+      ? t.moveCapture
       : lastMove?.kind === "place"
-        ? "Goat Placement"
+        ? t.movePlacement
         : lastMove
-          ? "Piece Movement"
-          : "Battle Ready";
+          ? t.moveMovement
+          : t.battleReady;
 
   const moveTypeColor =
     lastMove?.kind === "capture"
@@ -68,17 +70,21 @@ export function GameBoard({
           <span>{moveTypeLabel}</span>
         </div>
         <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-stone-950/80 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-stone-300 shadow-md backdrop-blur-md">
-          <span className={timeUrgent ? "text-rose-400 animate-pulse font-extrabold" : "text-amber-400"}>
-            {timeUrgent ? `⚡ Urgent · ${turnTimeLeft}s` : `Turn #${state.cells.filter(c => c !== "empty").length}`}
+          <span
+            className={timeUrgent ? "text-rose-400 animate-pulse font-extrabold" : "text-amber-400"}
+          >
+            {timeUrgent
+              ? t.urgent.replace("{n}", String(turnTimeLeft))
+              : t.turnHash.replace("{n}", String(state.cells.filter((c) => c !== "empty").length))}
           </span>
         </div>
       </div>
 
       {/* Ambient background glow backdrop */}
-      <div className="absolute -inset-2 rounded-[3rem] bg-gradient-to-tr from-amber-500/20 via-orange-500/10 to-emerald-500/20 opacity-70 blur-2xl transition-all duration-700 hover:opacity-100" />
+      <div className="t-board-aura absolute -inset-2 rounded-[3rem] opacity-70 blur-2xl transition-all duration-700 hover:opacity-100" />
 
       {/* Main SVG Game Board */}
-      <div className="relative overflow-hidden rounded-[2.5rem] border border-amber-500/25 bg-gradient-to-b from-stone-950 via-zinc-950 to-stone-950 p-3 shadow-[0_30px_70px_rgba(0,0,0,0.95)] ring-1 ring-white/10 backdrop-blur-xl">
+      <div className="t-board-frame relative overflow-hidden rounded-[2.5rem] bg-gradient-to-b from-stone-950 via-zinc-950 to-stone-950 p-3 ring-1 ring-white/10 backdrop-blur-xl">
         <svg
           viewBox={`0 0 ${W} ${H}`}
           className={`w-full select-none rounded-[2rem] transition-all duration-500 ${
@@ -112,9 +118,9 @@ export function GameBoard({
             </radialGradient>
 
             <radialGradient id="nodeGlowGold" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#fbbf24" stopOpacity="0.8" />
-              <stop offset="60%" stopColor="#d97706" stopOpacity="0.3" />
-              <stop offset="100%" stopColor="#78350f" stopOpacity="0" />
+              <stop offset="0%" style={{ stopColor: "var(--a1)" }} stopOpacity="0.8" />
+              <stop offset="60%" style={{ stopColor: "var(--a1)" }} stopOpacity="0.3" />
+              <stop offset="100%" style={{ stopColor: "var(--a1)" }} stopOpacity="0" />
             </radialGradient>
 
             <radialGradient id="nodeGlowTarget" cx="50%" cy="50%" r="50%">
@@ -124,7 +130,13 @@ export function GameBoard({
 
             {/* Drop Shadow Filters */}
             <filter id="pieceShadow" x="-30%" y="-30%" width="160%" height="160%">
-              <feDropShadow dx="0" dy="8" stdDeviation="7" floodColor="#000000" floodOpacity="0.85" />
+              <feDropShadow
+                dx="0"
+                dy="8"
+                stdDeviation="7"
+                floodColor="#000000"
+                floodOpacity="0.85"
+              />
             </filter>
 
             <filter id="glowTigerFilter" x="-40%" y="-40%" width="180%" height="180%">
@@ -142,11 +154,24 @@ export function GameBoard({
           <rect x={0} y={0} width={W} height={H} rx={32} fill="url(#boardBgGrad)" />
 
           {/* Traditional Outer Decorative Frame Corner Accents */}
-          <g stroke="#f59e0b" strokeWidth="1.5" strokeOpacity="0.35" fill="none">
-            <path d={`M ${PAD / 2} ${PAD / 2 + 20} L ${PAD / 2} ${PAD / 2} L ${PAD / 2 + 20} ${PAD / 2}`} />
-            <path d={`M ${W - PAD / 2 - 20} ${PAD / 2} L ${W - PAD / 2} ${PAD / 2} L ${W - PAD / 2} ${PAD / 2 + 20}`} />
-            <path d={`M ${PAD / 2} ${H - PAD / 2 - 20} L ${PAD / 2} ${H - PAD / 2} L ${PAD / 2 + 20} ${H - PAD / 2}`} />
-            <path d={`M ${W - PAD / 2 - 20} ${H - PAD / 2} L ${W - PAD / 2} ${H - PAD / 2} L ${W - PAD / 2} ${H - PAD / 2 - 20}`} />
+          <g
+            style={{ stroke: "var(--board-line)" }}
+            strokeWidth="1.5"
+            strokeOpacity="0.35"
+            fill="none"
+          >
+            <path
+              d={`M ${PAD / 2} ${PAD / 2 + 20} L ${PAD / 2} ${PAD / 2} L ${PAD / 2 + 20} ${PAD / 2}`}
+            />
+            <path
+              d={`M ${W - PAD / 2 - 20} ${PAD / 2} L ${W - PAD / 2} ${PAD / 2} L ${W - PAD / 2} ${PAD / 2 + 20}`}
+            />
+            <path
+              d={`M ${PAD / 2} ${H - PAD / 2 - 20} L ${PAD / 2} ${H - PAD / 2} L ${PAD / 2 + 20} ${H - PAD / 2}`}
+            />
+            <path
+              d={`M ${W - PAD / 2 - 20} ${H - PAD / 2} L ${W - PAD / 2} ${H - PAD / 2} L ${W - PAD / 2} ${H - PAD / 2 - 20}`}
+            />
           </g>
 
           {/* Grid Edges (Lines) */}
@@ -163,13 +188,13 @@ export function GameBoard({
                 strokeLinecap="round"
                 opacity={0.3}
               />
-              {/* Crisp Golden Inner Center Line */}
+              {/* Crisp Theme Inner Center Line */}
               <line
                 x1={px(a)}
                 y1={py(a)}
                 x2={px(b)}
                 y2={py(b)}
-                stroke="#f59e0b"
+                style={{ stroke: "var(--board-line)" }}
                 strokeWidth={2.5}
                 strokeLinecap="round"
                 opacity={0.75}
@@ -196,7 +221,7 @@ export function GameBoard({
                 y1={py(lastFrom)}
                 x2={px(lastTo)}
                 y2={py(lastTo)}
-                stroke="#f59e0b"
+                style={{ stroke: "var(--a1)" }}
                 strokeWidth={10}
                 strokeLinecap="round"
                 opacity={0.35}
@@ -207,7 +232,7 @@ export function GameBoard({
                 y1={py(lastFrom)}
                 x2={px(lastTo)}
                 y2={py(lastTo)}
-                stroke="#fbbf24"
+                style={{ stroke: "var(--a3)" }}
                 strokeWidth={3.5}
                 strokeLinecap="round"
                 strokeDasharray="8 6"
@@ -219,7 +244,7 @@ export function GameBoard({
                 cy={py(lastTo)}
                 r={16}
                 fill="none"
-                stroke="#f59e0b"
+                style={{ stroke: "var(--a1)" }}
                 strokeWidth={2}
                 className="animate-ping"
                 opacity={0.7}
@@ -270,8 +295,10 @@ export function GameBoard({
 
             const nodeLabel =
               cell === "empty"
-                ? `${LABELS[i]} (Empty point${target ? ", Legal Destination" : ""})`
-                : `${LABELS[i]} (${cell.toUpperCase()}${isSelected ? ", Selected" : ""})`;
+                ? (target ? t.ariaDest : t.ariaEmpty).replace("{node}", LABELS[i])
+                : (isSelected ? t.ariaSelected : t.ariaPiece)
+                    .replace("{node}", LABELS[i])
+                    .replace("{side}", cell.toUpperCase());
 
             return (
               <g
@@ -297,7 +324,13 @@ export function GameBoard({
 
                 {/* Node Junction Point Visual */}
                 <circle cx={px(i)} cy={py(i)} r={14} fill="url(#nodeGlowGold)" opacity={0.6} />
-                <circle cx={px(i)} cy={py(i)} r={6} fill="#b45309" stroke="#f59e0b" strokeWidth={1.5} />
+                <circle
+                  cx={px(i)}
+                  cy={py(i)}
+                  r={6}
+                  style={{ fill: "var(--a2)", stroke: "var(--a1)" }}
+                  strokeWidth={1.5}
+                />
                 <circle cx={px(i)} cy={py(i)} r={2.5} fill="#fef08a" />
 
                 {/* Node Label Text on Hover or Active */}
@@ -309,7 +342,7 @@ export function GameBoard({
                   fontSize="9"
                   fontWeight="bold"
                   letterSpacing="0.1em"
-                  className="opacity-40 transition-opacity group-hover:opacity-100 group-hover:fill-amber-300"
+                  className="opacity-40 transition-opacity group-hover:opacity-100 group-hover:fill-[var(--a-soft)]"
                 >
                   {LABELS[i]}
                 </text>
@@ -360,7 +393,7 @@ export function GameBoard({
                           cy={py(i)}
                           r={cell === "tiger" ? 34 : 29}
                           fill="none"
-                          stroke="#fbbf24"
+                          style={{ stroke: "var(--a3)" }}
                           strokeWidth={4}
                           className="animate-pulse"
                           strokeDasharray="8 5"
@@ -370,7 +403,7 @@ export function GameBoard({
                           cy={py(i)}
                           r={cell === "tiger" ? 40 : 35}
                           fill="none"
-                          stroke="#f59e0b"
+                          style={{ stroke: "var(--a1)" }}
                           strokeWidth={1.5}
                           opacity={0.6}
                         />
@@ -404,7 +437,7 @@ export function GameBoard({
 
                     {/* Inner Artwork Emblem */}
                     {cell === "tiger" ? (
-                      /* Detailed Tiger Face Emblem */
+                      /* Realistic Tiger Face Emblem */
                       <g
                         transform={`translate(${px(i)}, ${py(i)})`}
                         className="stroke-amber-950"
@@ -413,25 +446,96 @@ export function GameBoard({
                         strokeLinejoin="round"
                       >
                         {/* Ears */}
-                        <path d="M -16 -12 L -22 -26 L -8 -17 Z" fill="#b45309" stroke="#fef08a" strokeWidth={1} />
-                        <path d="M 16 -12 L 22 -26 L 8 -17 Z" fill="#b45309" stroke="#fef08a" strokeWidth={1} />
-                        {/* Forehead Stripes */}
-                        <path d="M -8 -19 L 0 -11 L 8 -19" fill="none" stroke="#78350f" strokeWidth={2.5} />
-                        <path d="M 0 -23 L 0 -15" stroke="#78350f" strokeWidth={2.5} />
-                        {/* Whiskers */}
-                        <path d="M -17 -4 L -8 -2 M -17 3 L -8 1 M -16 10 L -8 5" stroke="#451a03" />
-                        <path d="M 17 -4 L 8 -2 M 17 3 L 8 1 M 16 10 L 8 5" stroke="#451a03" />
-                        {/* Eyes */}
-                        <circle cx={-6} cy={-3} r={2.8} fill="#fef08a" stroke="#451a03" strokeWidth={1.2} />
-                        <circle cx={6} cy={-3} r={2.8} fill="#fef08a" stroke="#451a03" strokeWidth={1.2} />
-                        <circle cx={-6} cy={-3} r={1.2} fill="#000" />
-                        <circle cx={6} cy={-3} r={1.2} fill="#000" />
-                        {/* Snout & Nose */}
-                        <path d="M -6 4 Q 0 0 6 4 L 3 10 L 0 12 L -3 10 Z" fill="#fef08a" stroke="#78350f" strokeWidth={1.5} />
-                        <path d="M -4 9 Q 0 14 4 9" fill="none" stroke="#451a03" strokeWidth={2} />
+                        <path
+                          d="M -18 -10 L -26 -28 L -6 -16 Z"
+                          fill="#c2410c"
+                          stroke="#7c2d12"
+                          strokeWidth={1.5}
+                        />
+                        <path
+                          d="M 18 -10 L 26 -28 L 6 -16 Z"
+                          fill="#c2410c"
+                          stroke="#7c2d12"
+                          strokeWidth={1.5}
+                        />
+                        <path d="M -18 -13 L -22 -24 L -10 -16 Z" fill="#fdba74" stroke="none" />
+                        <path d="M 18 -13 L 22 -24 L 10 -16 Z" fill="#fdba74" stroke="none" />
+                        {/* Head */}
+                        <circle r={19} fill="#f59e0b" stroke="#9a3412" strokeWidth={2} />
+                        <ellipse
+                          cx={0}
+                          cy={11}
+                          rx={12}
+                          ry={7}
+                          fill="#fdba74"
+                          stroke="none"
+                          opacity={0.55}
+                        />
+                        {/* Forehead stripes */}
+                        <path d="M 0 -19 L 0 -11" stroke="#451a03" strokeWidth={3} />
+                        <path d="M -9 -17 L -5 -10" stroke="#451a03" strokeWidth={3} />
+                        <path d="M 9 -17 L 5 -10" stroke="#451a03" strokeWidth={3} />
+                        {/* Cheek stripes */}
+                        <path d="M -17 -4 L -11 -3" stroke="#451a03" strokeWidth={2.5} />
+                        <path d="M 17 -4 L 11 -3" stroke="#451a03" strokeWidth={2.5} />
+                        <path d="M -17 4 L -11 3" stroke="#451a03" strokeWidth={2.5} />
+                        <path d="M 17 4 L 11 3" stroke="#451a03" strokeWidth={2.5} />
+                        {/* Eyes (amber iris, round pupil, highlight) */}
+                        <ellipse
+                          cx={-7.5}
+                          cy={-2}
+                          rx={4.6}
+                          ry={3.6}
+                          fill="#fff7ed"
+                          stroke="#451a03"
+                          strokeWidth={1.2}
+                        />
+                        <ellipse
+                          cx={7.5}
+                          cy={-2}
+                          rx={4.6}
+                          ry={3.6}
+                          fill="#fff7ed"
+                          stroke="#451a03"
+                          strokeWidth={1.2}
+                        />
+                        <circle cx={-7.5} cy={-2} r={2.5} fill="#b45309" stroke="none" />
+                        <circle cx={7.5} cy={-2} r={2.5} fill="#b45309" stroke="none" />
+                        <ellipse cx={-7.5} cy={-2} rx={1} ry={1.7} fill="#1c1917" stroke="none" />
+                        <ellipse cx={7.5} cy={-2} rx={1} ry={1.7} fill="#1c1917" stroke="none" />
+                        <circle cx={-6.7} cy={-2.8} r={0.7} fill="#ffffff" stroke="none" />
+                        <circle cx={8.3} cy={-2.8} r={0.7} fill="#ffffff" stroke="none" />
+                        {/* Muzzle */}
+                        <ellipse cx={0} cy={8.5} rx={10} ry={7} fill="#fff7ed" stroke="none" />
+                        {/* Nose + mouth */}
+                        <path
+                          d="M -4 5 L 4 5 L 0 9.5 Z"
+                          fill="#7c2d12"
+                          stroke="#451a03"
+                          strokeWidth={1}
+                        />
+                        <path
+                          d="M 0 9.5 L 0 12 M 0 12 Q -1 14.5 -4.5 14 M 0 12 Q 1 14.5 4.5 14"
+                          fill="none"
+                          stroke="#451a03"
+                          strokeWidth={1.6}
+                        />
+                        {/* Whiskers + dots */}
+                        <circle cx={-8} cy={8} r={0.8} fill="#a8a29e" stroke="none" />
+                        <circle cx={-10} cy={10.5} r={0.8} fill="#a8a29e" stroke="none" />
+                        <circle cx={-8} cy={13} r={0.8} fill="#a8a29e" stroke="none" />
+                        <circle cx={8} cy={8} r={0.8} fill="#a8a29e" stroke="none" />
+                        <circle cx={10} cy={10.5} r={0.8} fill="#a8a29e" stroke="none" />
+                        <circle cx={8} cy={13} r={0.8} fill="#a8a29e" stroke="none" />
+                        <path
+                          d="M -9 9 L -18 7 M -9 11.5 L -18 12.5 M 9 9 L 18 7 M 9 11.5 L 18 12.5"
+                          stroke="#e7e5e4"
+                          strokeWidth={1}
+                          opacity={0.9}
+                        />
                       </g>
                     ) : (
-                      /* Detailed Goat Horns Emblem */
+                      /* Realistic Goat Face Emblem */
                       <g
                         transform={`translate(${px(i)}, ${py(i)})`}
                         className="stroke-emerald-950"
@@ -439,29 +543,121 @@ export function GameBoard({
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       >
-                        {/* Curved Horns */}
+                        {/* Ridged curved horns */}
                         <path
-                          d="M -10 -8 C -19 -19 -16 -28 -7 -26 C -9 -20 -4 -16 -1 -14"
-                          fill="#064e3b"
-                          stroke="#a7f3d0"
+                          d="M -7 -9 C -17 -13 -21 -24 -13 -30 C -11 -31 -9 -30 -9 -28 C -13 -24 -12 -17 -5 -13 Z"
+                          fill="#d6d3d1"
+                          stroke="#57534e"
                           strokeWidth={1.4}
                         />
                         <path
-                          d="M 10 -8 C 19 -19 16 -28 7 -26 C 9 -20 4 -16 1 -14"
-                          fill="#064e3b"
-                          stroke="#a7f3d0"
+                          d="M 7 -9 C 17 -13 21 -24 13 -30 C 11 -31 9 -30 9 -28 C 13 -24 12 -17 5 -13 Z"
+                          fill="#d6d3d1"
+                          stroke="#57534e"
                           strokeWidth={1.4}
                         />
-                        {/* Ears */}
-                        <path d="M -14 -4 L -21 -1 L -14 3 Z" fill="#047857" stroke="#ecfdf5" strokeWidth={1.2} />
-                        <path d="M 14 -4 L 21 -1 L 14 3 Z" fill="#047857" stroke="#ecfdf5" strokeWidth={1.2} />
+                        <path
+                          d="M -15 -22 L -10 -20 M -16 -18 L -11 -16"
+                          stroke="#78716c"
+                          strokeWidth={1.2}
+                        />
+                        <path
+                          d="M 15 -22 L 10 -20 M 16 -18 L 11 -16"
+                          stroke="#78716c"
+                          strokeWidth={1.2}
+                        />
+                        {/* Drooping ears */}
+                        <path
+                          d="M -11 0 L -22 3 L -20 9 L -10 6 Z"
+                          fill="#e7e5e4"
+                          stroke="#a8a29e"
+                          strokeWidth={1.2}
+                        />
+                        <path
+                          d="M 11 0 L 22 3 L 20 9 L 10 6 Z"
+                          fill="#e7e5e4"
+                          stroke="#a8a29e"
+                          strokeWidth={1.2}
+                        />
                         {/* Head */}
-                        <ellipse cy={2} rx={9.5} ry={11.5} fill="#10b981" stroke="#047857" strokeWidth={1.6} />
-                        {/* Eyes */}
-                        <circle cx={-4.5} cy={-1} r={2} fill="#ecfdf5" stroke="#064e3b" strokeWidth={0.9} />
-                        <circle cx={4.5} cy={-1} r={2} fill="#ecfdf5" stroke="#064e3b" strokeWidth={0.9} />
-                        {/* Snout */}
-                        <path d="M -3 6 Q 0 9.5 3 6" fill="none" stroke="#064e3b" strokeWidth={1.8} />
+                        <ellipse
+                          cx={0}
+                          cy={2}
+                          rx={10}
+                          ry={12}
+                          fill="#fafaf9"
+                          stroke="#a8a29e"
+                          strokeWidth={1.5}
+                        />
+                        {/* Forelock tuft */}
+                        <path
+                          d="M -6 -8 L -3 -13 L 0 -8 L 3 -13 L 6 -8 Z"
+                          fill="#e7e5e4"
+                          stroke="#a8a29e"
+                          strokeWidth={1}
+                        />
+                        {/* Eyes with horizontal slit pupils */}
+                        <ellipse
+                          cx={-4.5}
+                          cy={0}
+                          rx={2.8}
+                          ry={2.4}
+                          fill="#ffffff"
+                          stroke="#57534e"
+                          strokeWidth={1}
+                        />
+                        <ellipse
+                          cx={4.5}
+                          cy={0}
+                          rx={2.8}
+                          ry={2.4}
+                          fill="#ffffff"
+                          stroke="#57534e"
+                          strokeWidth={1}
+                        />
+                        <rect
+                          x={-6.9}
+                          y={-0.9}
+                          width={4.8}
+                          height={1.8}
+                          rx={0.9}
+                          fill="#1c1917"
+                          stroke="none"
+                        />
+                        <rect
+                          x={2.1}
+                          y={-0.9}
+                          width={4.8}
+                          height={1.8}
+                          rx={0.9}
+                          fill="#1c1917"
+                          stroke="none"
+                        />
+                        {/* Nose */}
+                        <ellipse
+                          cx={0}
+                          cy={7.5}
+                          rx={3.2}
+                          ry={2.4}
+                          fill="#d6a08e"
+                          stroke="#78716c"
+                          strokeWidth={1}
+                        />
+                        <circle cx={-1.3} cy={7.5} r={0.5} fill="#57534e" stroke="none" />
+                        <circle cx={1.3} cy={7.5} r={0.5} fill="#57534e" stroke="none" />
+                        {/* Mouth + goatee beard */}
+                        <path
+                          d="M -3 11 Q 0 13 3 11"
+                          fill="none"
+                          stroke="#57534e"
+                          strokeWidth={1.4}
+                        />
+                        <path
+                          d="M -2.5 12.5 L 0 20 L 2.5 12.5 Z"
+                          fill="#e7e5e4"
+                          stroke="#a8a29e"
+                          strokeWidth={1}
+                        />
                       </g>
                     )}
                   </g>

@@ -11,6 +11,9 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { registerServiceWorker } from "../lib/pwa";
+import { applyTheme, getSavedTheme } from "../lib/theme";
+import { getSavedLang, setLang } from "../lib/i18n";
 
 function NotFoundComponent() {
   return (
@@ -76,10 +79,19 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: "Aadu Puli Aatam" },
-      { name: "description", content: "A strategic goats and tigers board game." },
+      {
+        name: "description",
+        content:
+          "A strategic goats and tigers board game. Play vs AI or 2-player — works fully offline.",
+      },
       { name: "author", content: "Aadu Puli Aatam" },
+      { name: "theme-color", content: "#0c0a09" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-title", content: "AaduPuli" },
       { property: "og:title", content: "Aadu Puli Aatam" },
       {
         property: "og:description",
@@ -94,6 +106,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: appCss,
       },
       { rel: "icon", href: "/aadu-puli-favicon.svg", type: "image/svg+xml" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/icons/apple-touch-icon.png" },
     ],
   }),
   shellComponent: RootShell,
@@ -104,7 +118,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="ember">
       <head>
         <HeadContent />
       </head>
@@ -118,6 +132,12 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    registerServiceWorker();
+    applyTheme(getSavedTheme());
+    setLang(getSavedLang());
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

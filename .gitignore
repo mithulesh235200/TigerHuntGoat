@@ -32,3 +32,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Generated Capacitor web bundle (rebuilt via npm run android:export)
+android-www/

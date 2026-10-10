@@ -1,5 +1,11 @@
 import { CAPTURES_TO_WIN, TOTAL_GOATS, type GameState } from "@/lib/game/engine";
 import type { Difficulty } from "@/lib/game/ai";
+import type { ThemeId } from "@/lib/theme";
+import { ThemePicker } from "@/components/game/ThemePicker";
+import { StatsCharts } from "@/components/game/StatsCharts";
+import { useLang } from "@/lib/i18n";
+import type { GameRecord } from "@/lib/stats";
+import { useEffect, useState } from "react";
 import {
   Trophy,
   RotateCcw,
@@ -20,9 +26,16 @@ import {
   Flame,
   Target,
   Zap,
+  Timer,
+  ChevronLeft,
+  ChevronRight,
+  Film,
+  BarChart3,
 } from "lucide-react";
 
 export type GameMode = "goat-vs-ai" | "tiger-vs-ai" | "hotseat" | "online";
+export type TimeoutSecs = 15 | 30 | 60;
+export type TimeoutRule = "warn" | "forfeit";
 
 type Props = {
   state: GameState;
@@ -52,46 +65,37 @@ type Props = {
   copied?: boolean;
   onCopyInviteLink?: () => void;
   onMode: (m: GameMode) => void;
+  onToggleChallenge?: () => void;
+  theme: ThemeId;
+  onTheme: (t: ThemeId) => void;
   onDifficulty: (d: Difficulty) => void;
   onToggleMute: () => void;
   onNewGame: () => void;
   onReset: () => void;
   onUndo: () => void;
   onHint: () => void;
+  records: GameRecord[];
+  timeoutSecs: TimeoutSecs;
+  timeoutRule: TimeoutRule;
+  onTimeoutSecs: (s: TimeoutSecs) => void;
+  onTimeoutRule: (r: TimeoutRule) => void;
+  replayIndex: number;
+  replayTotal: number;
+  replayActive: boolean;
+  replayCopied: boolean;
+  onReplayStep: (delta: number) => void;
+  onReplayExit: () => void;
+  onCopyReplay: () => void;
 };
 
-const modes: { id: GameMode; label: string; sub: string; icon: React.ReactNode }[] = [
-  {
-    id: "goat-vs-ai",
-    label: "Goats vs AI Tigers",
-    sub: "Defend with the herd",
-    icon: <BrainCircuit className="h-4 w-4 text-amber-400" />,
-  },
-  {
-    id: "tiger-vs-ai",
-    label: "Tigers vs AI Goats",
-    sub: "Hunt with 3 tigers",
-    icon: <Swords className="h-4 w-4 text-emerald-400" />,
-  },
-  {
-    id: "hotseat",
-    label: "Local 2 Players",
-    sub: "Pass & play hotseat",
-    icon: <Gamepad2 className="h-4 w-4 text-sky-400" />,
-  },
-  {
-    id: "online",
-    label: "Online Room",
-    sub: "Play across devices",
-    icon: <Share2 className="h-4 w-4 text-cyan-400" />,
-  },
+const modeMeta: { id: GameMode; icon: React.ReactNode }[] = [
+  { id: "goat-vs-ai", icon: <BrainCircuit className="h-4 w-4 t-accent-text" /> },
+  { id: "tiger-vs-ai", icon: <Swords className="h-4 w-4 text-emerald-400" /> },
+  { id: "hotseat", icon: <Gamepad2 className="h-4 w-4 text-sky-400" /> },
+  { id: "online", icon: <Share2 className="h-4 w-4 text-cyan-400" /> },
 ];
 
-const levels: { id: Difficulty; label: string; note: string }[] = [
-  { id: "easy", label: "Easy", note: "Casual" },
-  { id: "medium", label: "Medium", note: "Tactical" },
-  { id: "hard", label: "Hard", note: "Expert" },
-];
+const levelIds: Difficulty[] = ["easy", "medium", "hard"];
 
 function Panel({
   title,
@@ -105,11 +109,11 @@ function Panel({
   badge?: React.ReactNode;
 }) {
   return (
-    <section className="glass-card rounded-3xl p-4 shadow-2xl transition-all duration-300 hover:border-amber-500/30">
+    <section className="glass-card t-panel rounded-3xl p-4 shadow-2xl transition-all duration-300">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           {icon}
-          <h2 className="text-xs font-black uppercase tracking-[0.2em] text-amber-400/90">{title}</h2>
+          <h2 className="t-panel-title text-xs font-black uppercase tracking-[0.2em]">{title}</h2>
         </div>
         {badge}
       </div>
@@ -118,8 +122,54 @@ function Panel({
   );
 }
 
+function ConnectionDot() {
+  const { t } = useLang();
+  const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+        online ? "bg-emerald-500/10 text-emerald-300" : "bg-rose-500/10 text-rose-300"
+      }`}
+      title={online ? t.online : t.offline}
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${online ? "bg-emerald-400" : "bg-rose-400 animate-pulse"}`}
+      />
+      {online ? t.online : t.offline}
+    </span>
+  );
+}
+
 export function Sidebar(p: Props) {
   const { state } = p;
+  const { t } = useLang();
+  const modes = modeMeta.map((m) => {
+    switch (m.id) {
+      case "goat-vs-ai":
+        return { ...m, label: `${t.modeGoat} vs AI`, sub: t.modeGoatSub };
+      case "tiger-vs-ai":
+        return { ...m, label: `${t.modeTiger} vs AI`, sub: t.modeTigerSub };
+      case "hotseat":
+        return { ...m, label: t.modeLocal, sub: t.modeLocalSub };
+      case "online":
+        return { ...m, label: t.modeOnline, sub: t.modeOnlineSub };
+    }
+  });
+  const levels = levelIds.map((id) => ({
+    id,
+    label: id === "easy" ? t.easy : id === "medium" ? t.medium : t.hard,
+    note: id === "easy" ? t.easyNote : id === "medium" ? t.mediumNote : t.hardNote,
+  }));
   const goatsOnBoard = state.cells.filter((c) => c === "goat").length;
   const placementProgress = Math.round(((TOTAL_GOATS - state.goatsToPlace) / TOTAL_GOATS) * 100);
   const captureProgress = Math.round((state.goatsCaptured / CAPTURES_TO_WIN) * 100);
@@ -132,18 +182,19 @@ export function Sidebar(p: Props) {
     p.turnTimeLeft !== undefined && p.turnTimeLeft <= 8
       ? "from-rose-500 to-red-600"
       : p.turnTimeLeft !== undefined && p.turnTimeLeft <= 15
-        ? "from-amber-500 to-orange-500"
+        ? "from-[var(--a1)] to-[var(--a2)]"
         : "from-emerald-500 to-teal-400";
 
   return (
     <aside className="flex w-full flex-col gap-4.5 lg:max-w-sm">
       {/* Live Match Status Panel */}
       <Panel
-        title="Live Match Status"
-        icon={<Trophy className="h-4 w-4 text-amber-400" />}
+        title={t.liveStatus}
+        icon={<Trophy className="h-4 w-4 t-accent-text" />}
         badge={
           <span className="rounded-full border border-white/10 bg-stone-950/70 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-stone-400">
-            Session #{p.sessionCount ?? 1}
+            {t.session}
+            {p.sessionCount ?? 1}
           </span>
         }
       >
@@ -152,16 +203,16 @@ export function Sidebar(p: Props) {
             <span className="text-2xl font-black text-stone-100">
               {state.winner
                 ? state.winner === "tiger"
-                  ? "🐯 Tigers Win!"
-                  : "🐐 Goats Win!"
+                  ? t.tigerWins
+                  : t.goatWins
                 : state.turn === "goat"
-                  ? "Goats to Move"
-                  : "Tigers to Move"}
+                  ? t.goatsToMove
+                  : t.tigersToMove}
             </span>
             <span className="text-[11px] font-medium text-stone-400">
               {state.goatsToPlace > 0
-                ? `Placement Phase (${state.goatsToPlace} goats left)`
-                : "Movement Phase (Full Grid)"}
+                ? t.placementPhase.replace("{n}", String(state.goatsToPlace))
+                : t.movementPhase}
             </span>
           </div>
 
@@ -172,21 +223,19 @@ export function Sidebar(p: Props) {
                 : "bg-gradient-to-r from-emerald-600 to-teal-600 text-emerald-100 shadow-emerald-950/50 ring-1 ring-emerald-400/40"
             }`}
           >
-            {state.turn === "tiger" ? "🐯 Tiger Turn" : "🐐 Goat Turn"}
+            {state.turn === "tiger" ? t.tigerTurn : t.goatTurn}
           </span>
         </div>
 
         {/* Live Message & Thinking Bar */}
         <div className="mt-3 rounded-2xl border border-white/5 bg-stone-950/80 p-3 shadow-inner">
           {p.thinking ? (
-            <div className="flex items-center gap-3 text-amber-400">
+            <div className="flex items-center gap-3 t-accent-text">
               <span className="relative flex h-3 w-3">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"></span>
-                <span className="relative inline-flex h-3 w-3 rounded-full bg-amber-500"></span>
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--a1)] opacity-75"></span>
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-[var(--a1)]"></span>
               </span>
-              <span className="text-xs font-bold uppercase tracking-wider">
-                AI Minimax Engine Calculating Move...
-              </span>
+              <span className="text-xs font-bold uppercase tracking-wider">{t.thinking}</span>
             </div>
           ) : (
             <p
@@ -203,8 +252,8 @@ export function Sidebar(p: Props) {
         <div className="mt-3 rounded-2xl border border-white/5 bg-stone-950/70 p-3">
           <div className="mb-1.5 flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400">
             <span className="flex items-center gap-1">
-              <Zap className="h-3 w-3 text-amber-400" />
-              Turn Countdown
+              <Zap className="h-3 w-3 t-accent-text" />
+              {t.turnCountdown}
             </span>
             <span
               className={
@@ -213,7 +262,7 @@ export function Sidebar(p: Props) {
                   : "text-stone-200"
               }
             >
-              {p.turnTimeLeft ?? 0}s remaining
+              {t.secondsLeft.replace("{n}", String(p.turnTimeLeft ?? 0))}
             </span>
           </div>
           <div className="h-2 w-full overflow-hidden rounded-full bg-stone-900 shadow-inner">
@@ -228,40 +277,42 @@ export function Sidebar(p: Props) {
         <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
           <div className="rounded-2xl border border-white/5 bg-stone-950/70 p-2.5">
             <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">
-              Available Moves
+              {t.availMoves}
             </div>
-            <div className="mt-1 flex items-baseline gap-1 text-lg font-black text-amber-300">
+            <div className="mt-1 flex items-baseline gap-1 text-lg font-black t-accent-text">
               <span>{p.legalMovesCount ?? 0}</span>
-              <span className="text-[10px] font-normal text-stone-500">legal options</span>
+              <span className="text-[10px] font-normal text-stone-500">{t.legalOptions}</span>
             </div>
           </div>
 
           <div className="rounded-2xl border border-white/5 bg-stone-950/70 p-2.5">
             <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">
-              Tactical Recommendation
+              {t.tacRec}
             </div>
             <div className="mt-1 line-clamp-1 text-xs font-black text-emerald-300">
-              {p.suggestedMove || "Analyzing..."}
+              {p.suggestedMove || t.analyzing}
             </div>
           </div>
         </div>
       </Panel>
 
       {/* AI Tactical Coach Read */}
-      <Panel title="AI Tactical Coach" icon={<Sparkles className="h-4 w-4 text-emerald-400" />}>
+      <Panel title={t.coachTitle} icon={<Sparkles className="h-4 w-4 text-emerald-400" />}>
         <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs leading-relaxed text-emerald-100">
-          {p.coachInsight || "Make a move to receive tactical insights."}
+          {p.coachInsight}
         </div>
       </Panel>
 
       {/* Battle Scoreboard Panel */}
-      <Panel title="Battle Scoreboard" icon={<ShieldAlert className="h-4 w-4 text-amber-400" />}>
+      <Panel title={t.scoreboard} icon={<ShieldAlert className="h-4 w-4 t-accent-text" />}>
         <div className="grid grid-cols-2 gap-3 text-xs">
           {/* Goats Placement Progress */}
           <div className="rounded-2xl border border-white/5 bg-stone-950/70 p-3">
             <div className="flex items-center justify-between font-bold text-stone-400">
-              <span>Goats Placed</span>
-              <span className="text-emerald-400">{state.goatsToPlace} left</span>
+              <span>{t.goatsPlaced}</span>
+              <span className="text-emerald-400">
+                {state.goatsToPlace} {t.leftWord}
+              </span>
             </div>
             <div className="mt-1 text-2xl font-black text-stone-100">
               {TOTAL_GOATS - state.goatsToPlace}{" "}
@@ -278,8 +329,10 @@ export function Sidebar(p: Props) {
           {/* Goats Capture Progress */}
           <div className="rounded-2xl border border-white/5 bg-stone-950/70 p-3">
             <div className="flex items-center justify-between font-bold text-stone-400">
-              <span>Goats Captured</span>
-              <span className="text-rose-400">{CAPTURES_TO_WIN - state.goatsCaptured} to win</span>
+              <span>{t.capturedTitle}</span>
+              <span className="text-rose-400">
+                {CAPTURES_TO_WIN - state.goatsCaptured} {t.toWin}
+              </span>
             </div>
             <div className="mt-1 text-2xl font-black text-rose-400">
               {state.goatsCaptured}{" "}
@@ -296,31 +349,35 @@ export function Sidebar(p: Props) {
           {/* Active Goats Count */}
           <div className="rounded-2xl border border-white/5 bg-stone-950/70 p-2.5">
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-stone-400">
-              Herd On Grid
+              {t.herdOnGrid}
             </div>
-            <div className="mt-0.5 text-base font-black text-emerald-300">{goatsOnBoard} Goats</div>
+            <div className="mt-0.5 text-base font-black text-emerald-300">
+              {goatsOnBoard} {t.goatsUnit}
+            </div>
           </div>
 
           {/* Active Tigers Count */}
           <div className="rounded-2xl border border-white/5 bg-stone-950/70 p-2.5">
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-stone-400">
-              Prowling Hunters
+              {t.hunters}
             </div>
-            <div className="mt-0.5 text-base font-black text-amber-300">3 Tigers</div>
+            <div className="mt-0.5 text-base font-black text-amber-300">{t.tigersUnit}</div>
           </div>
         </div>
 
         {/* Career & Session Score Records */}
         <div className="mt-3 rounded-2xl border border-white/5 bg-stone-950/70 p-3">
           <div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400">
-            <span>Career Match Record</span>
-            <span className="text-amber-400">{p.matchStats?.games ?? 0} total games</span>
+            <span>{t.careerRecord}</span>
+            <span className="t-accent-text">
+              {t.totalGames.replace("{n}", String(p.matchStats?.games ?? 0))}
+            </span>
           </div>
 
           <div className="grid grid-cols-3 gap-2 text-center text-xs">
             <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-2">
               <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-                Goat Wins
+                {t.goatWinsCard}
               </div>
               <div className="mt-0.5 text-lg font-black text-stone-100">
                 {p.matchStats?.goatWins ?? 0}
@@ -328,7 +385,7 @@ export function Sidebar(p: Props) {
             </div>
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-2">
               <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
-                Tiger Wins
+                {t.tigerWinsCard}
               </div>
               <div className="mt-0.5 text-lg font-black text-stone-100">
                 {p.matchStats?.tigerWins ?? 0}
@@ -336,7 +393,7 @@ export function Sidebar(p: Props) {
             </div>
             <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-2">
               <div className="text-[10px] font-bold uppercase tracking-wider text-sky-400">
-                Streak
+                {t.streak}
               </div>
               <div className="mt-0.5 text-lg font-black text-stone-100">
                 {p.matchStats?.currentStreak ?? 0}🔥
@@ -346,26 +403,28 @@ export function Sidebar(p: Props) {
         </div>
       </Panel>
 
+      {/* Match Analytics Panel */}
+      <Panel title={t.analyticsTitle} icon={<BarChart3 className="h-4 w-4 t-accent-text" />}>
+        <StatsCharts records={p.records} />
+      </Panel>
+
       {/* Game Mode & AI Setup Panel */}
-      <Panel title="Game Controls & AI" icon={<BrainCircuit className="h-4 w-4 text-amber-400" />}>
+      <Panel title={t.controlsTitle} icon={<BrainCircuit className="h-4 w-4 t-accent-text" />}>
         {/* Challenge Mode Banner */}
-        <div className="mb-3 flex items-center justify-between rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-orange-500/10 px-3.5 py-2">
+        <div className="t-chip mb-3 flex items-center justify-between rounded-2xl px-3.5 py-2">
           <div className="flex items-center gap-2">
-            <Flame className="h-4 w-4 text-amber-400 animate-bounce" />
-            <span className="text-xs font-black uppercase tracking-wider text-amber-200">
-              Challenge Opening Rule
-            </span>
+            <Flame className="h-4 w-4 animate-bounce" />
+            <span className="text-xs font-black uppercase tracking-wider">{t.challengeRule}</span>
           </div>
           <button
             type="button"
-            onClick={() => p.onMode(p.mode)}
+            onClick={() => p.onToggleChallenge?.()}
+            aria-pressed={!!p.challengeMode}
             className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider transition-all ${
-              p.challengeMode
-                ? "bg-amber-400 text-stone-950 shadow-md shadow-amber-950/40"
-                : "bg-stone-800 text-stone-300"
+              p.challengeMode ? "t-btn-primary" : "bg-stone-800 text-stone-300 hover:bg-stone-700"
             }`}
           >
-            {p.challengeMode ? "ON" : "OFF"}
+            {p.challengeMode ? t.on : t.off}
           </button>
         </div>
 
@@ -375,15 +434,15 @@ export function Sidebar(p: Props) {
             <button
               key={m.id}
               onClick={() => p.onMode(m.id)}
-              className={`flex flex-col gap-1 rounded-2xl p-3 text-left transition-all ${
+              className={`flex flex-col gap-1 rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5 ${
                 p.mode === m.id
-                  ? "border border-amber-400/60 bg-gradient-to-br from-amber-500/20 to-orange-500/20 text-stone-100 shadow-lg ring-1 ring-amber-400/40"
+                  ? "t-mode-active border text-stone-100"
                   : "border border-white/5 bg-stone-950/60 text-stone-400 hover:border-white/20 hover:text-stone-200"
               }`}
             >
               <div className="flex items-center gap-2 font-bold text-xs">
                 {m.icon}
-                <span className={p.mode === m.id ? "text-amber-200" : ""}>{m.label}</span>
+                <span className={p.mode === m.id ? "t-accent-text" : ""}>{m.label}</span>
               </div>
               <span className="text-[10px] font-medium opacity-75">{m.sub}</span>
             </button>
@@ -393,7 +452,7 @@ export function Sidebar(p: Props) {
         {/* AI Difficulty Selector */}
         <div className="mt-3">
           <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400">
-            AI Minimax Difficulty
+            {t.aiDifficulty}
           </div>
           <div className="grid grid-cols-3 gap-2">
             {levels.map((l) => (
@@ -403,7 +462,7 @@ export function Sidebar(p: Props) {
                 disabled={p.mode === "hotseat"}
                 className={`rounded-xl py-2 px-1 text-center transition-all disabled:opacity-30 ${
                   p.difficulty === l.id
-                    ? "bg-gradient-to-r from-amber-500 to-orange-500 text-stone-950 font-black shadow-md shadow-amber-950/50"
+                    ? "t-btn-primary font-black"
                     : "bg-stone-950/70 border border-white/5 text-stone-400 hover:bg-stone-800 hover:text-stone-200"
                 }`}
               >
@@ -413,17 +472,70 @@ export function Sidebar(p: Props) {
             ))}
           </div>
         </div>
+
+        {/* Turn Clock + Timeout Rule */}
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <div>
+            <div className="mb-1.5 flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400">
+              <Timer className="h-3 w-3 t-accent-text" />
+              {t.clockLabel}
+            </div>
+            <div className="grid grid-cols-3 gap-1">
+              {([15, 30, 60] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => p.onTimeoutSecs(s)}
+                  className={`rounded-lg py-1.5 text-[11px] font-black transition-all ${
+                    p.timeoutSecs === s
+                      ? "t-btn-primary"
+                      : "border border-white/5 bg-stone-950/70 text-stone-400 hover:text-stone-200"
+                  }`}
+                >
+                  {t.secs.replace("{n}", String(s))}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400">
+              {t.timeoutLabel}
+            </div>
+            <div className="grid grid-cols-2 gap-1">
+              {(["warn", "forfeit"] as const).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => p.onTimeoutRule(r)}
+                  className={`rounded-lg py-1.5 text-[11px] font-black transition-all ${
+                    p.timeoutRule === r
+                      ? "t-btn-primary"
+                      : "border border-white/5 bg-stone-950/70 text-stone-400 hover:text-stone-200"
+                  }`}
+                >
+                  {r === "warn" ? t.warnOnly : t.forfeitGame}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* App Theme */}
+        <div className="mt-3">
+          <ThemePicker value={p.theme} onChange={p.onTheme} />
+        </div>
       </Panel>
 
       {/* Multiplayer Room Sharing Link Panel */}
       <Panel
-        title={p.mode === "online" ? "Online Invite Code" : "Local Hotseat Invite"}
+        title={p.mode === "online" ? t.inviteOnline : t.inviteLocal}
         icon={<Users className="h-4 w-4 text-sky-400" />}
+        badge={<ConnectionDot />}
       >
         <div className="flex flex-col gap-2.5 text-xs">
           <div className="flex items-center justify-between">
-            <span className="text-stone-400">Match Code</span>
-            <span className="font-mono text-sm font-black text-sky-400">#{p.roomId || "MATCH"}</span>
+            <span className="text-stone-400">{t.matchCode}</span>
+            <span className="font-mono text-sm font-black text-sky-400">
+              #{p.roomId || "MATCH"}
+            </span>
           </div>
 
           <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-stone-950/90 p-2.5">
@@ -451,12 +563,12 @@ export function Sidebar(p: Props) {
             {p.copied ? (
               <>
                 <Check className="h-4 w-4" />
-                <span>Invite Link Copied!</span>
+                <span>{t.copiedMsg}</span>
               </>
             ) : (
               <>
                 <Copy className="h-4 w-4" />
-                <span>{p.mode === "online" ? "Copy Online Invite Link" : "Copy Room Link"}</span>
+                <span>{p.mode === "online" ? t.copyOnline : t.copyLocal}</span>
               </>
             )}
           </button>
@@ -464,16 +576,58 @@ export function Sidebar(p: Props) {
       </Panel>
 
       {/* Move History Feed Panel */}
-      <Panel title="Move Feed History" icon={<History className="h-4 w-4 text-amber-400" />}>
+      <Panel title={t.history} icon={<History className="h-4 w-4 t-accent-text" />}>
+        {/* Replay stepper */}
+        {p.replayTotal > 0 && (
+          <div className="mb-2.5 flex items-center gap-1.5 rounded-xl border border-white/10 bg-stone-950/70 p-1.5">
+            <Film className="ml-1 h-4 w-4 shrink-0 t-accent-text" />
+            <button
+              onClick={() => p.onReplayStep(-1)}
+              disabled={!p.replayActive && p.replayIndex <= 0}
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-stone-200 transition-all disabled:opacity-30 hover:bg-stone-800"
+              aria-label={t.replayPrev}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => p.onReplayStep(1)}
+              disabled={!p.replayActive}
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-stone-200 transition-all disabled:opacity-30 hover:bg-stone-800"
+              aria-label={t.replayNext}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            <span className="flex-1 text-center text-[11px] font-bold text-stone-300">
+              {t.viewingMove
+                .replace("{i}", String(p.replayActive ? p.replayIndex : p.replayTotal))
+                .replace("{n}", String(p.replayTotal))}
+            </span>
+            {p.replayActive ? (
+              <button
+                onClick={p.onReplayExit}
+                className="rounded-lg bg-emerald-600 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-white transition-all hover:brightness-110"
+              >
+                {t.replayLive}
+              </button>
+            ) : (
+              <button
+                onClick={p.onCopyReplay}
+                className="t-chip rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-wider transition-all hover:brightness-125"
+              >
+                {p.replayCopied ? <Check className="h-3.5 w-3.5" /> : t.copyReplay}
+              </button>
+            )}
+          </div>
+        )}
         <ol className="flex max-h-40 flex-col-reverse gap-1.5 overflow-y-auto pr-1 text-xs text-stone-300">
           {p.log.length === 0 && (
-            <li className="py-3 text-center font-medium italic text-stone-500">
-              No moves recorded yet. Place the first goat!
-            </li>
+            <li className="py-3 text-center font-medium italic text-stone-500">{t.noMoves}</li>
           )}
           {p.log.map((entry, i) => {
-            const isCapture = entry.includes("captured");
-            const isPlacement = entry.includes("placed");
+            const isCapture =
+              entry.includes("⏱") || entry.includes("Captured") || entry.includes("பிடித்தது");
+            const isPlacement =
+              !entry.includes("→") || entry.includes("placed") || entry.includes("வைத்தது");
 
             return (
               <li
@@ -486,7 +640,9 @@ export function Sidebar(p: Props) {
                       : "border-white/5 bg-stone-950/60 text-stone-300 hover:bg-stone-900"
                 }`}
               >
-                <span className="font-mono text-[10px] font-bold opacity-60">#{p.log.length - i}</span>
+                <span className="font-mono text-[10px] font-bold opacity-60">
+                  #{p.log.length - i}
+                </span>
                 <span className="font-medium">{entry}</span>
               </li>
             );
@@ -498,10 +654,10 @@ export function Sidebar(p: Props) {
       <div className="grid grid-cols-2 gap-2.5">
         <button
           onClick={p.onNewGame}
-          className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-3 text-xs font-black uppercase tracking-wider text-stone-950 shadow-xl shadow-amber-950/40 transition-all hover:scale-[1.02] active:scale-95"
+          className="t-btn-primary flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wider transition-all hover:scale-[1.02] active:scale-95"
         >
           <RotateCcw className="h-4 w-4" />
-          <span>New Game</span>
+          <span>{t.newGame}</span>
         </button>
 
         <button
@@ -510,7 +666,7 @@ export function Sidebar(p: Props) {
           className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-3 text-xs font-black uppercase tracking-wider text-emerald-950 shadow-xl shadow-emerald-950/40 transition-all disabled:opacity-30 hover:scale-[1.02] active:scale-95"
         >
           <Sparkles className="h-4 w-4 text-emerald-100" />
-          <span className="text-emerald-100">Tactical Hint</span>
+          <span className="text-emerald-100">{t.hintBtn}</span>
         </button>
 
         <button
@@ -518,8 +674,8 @@ export function Sidebar(p: Props) {
           disabled={!p.canUndo}
           className="flex items-center justify-center gap-2 rounded-2xl border border-stone-800 bg-stone-900/90 px-4 py-3 text-xs font-bold tracking-wider text-stone-200 transition-all disabled:opacity-30 hover:bg-stone-800 active:scale-95"
         >
-          <Undo2 className="h-4 w-4 text-amber-400" />
-          <span>Undo</span>
+          <Undo2 className="h-4 w-4 t-accent-text" />
+          <span>{t.undoBtn}</span>
         </button>
 
         <button
@@ -531,7 +687,7 @@ export function Sidebar(p: Props) {
           ) : (
             <Volume2 className="h-4 w-4 text-emerald-400" />
           )}
-          <span>{p.muted ? "Muted" : "Sound On"}</span>
+          <span>{p.muted ? t.mutedWord : t.soundOn}</span>
         </button>
       </div>
     </aside>
