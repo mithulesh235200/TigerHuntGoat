@@ -29,8 +29,10 @@ import {
   Timer,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Film,
   BarChart3,
+  GraduationCap,
 } from "lucide-react";
 
 export type GameMode = "goat-vs-ai" | "tiger-vs-ai" | "hotseat" | "online";
@@ -46,9 +48,7 @@ type Props = {
   log: string[];
   thinking: boolean;
   canUndo: boolean;
-  canHint: boolean;
   legalMovesCount?: number;
-  suggestedMove?: string;
   coachInsight?: string;
   turnTimeLeft?: number;
   turnTimeLimit?: number;
@@ -73,7 +73,7 @@ type Props = {
   onNewGame: () => void;
   onReset: () => void;
   onUndo: () => void;
-  onHint: () => void;
+  onTour: () => void;
   records: GameRecord[];
   timeoutSecs: TimeoutSecs;
   timeoutRule: TimeoutRule;
@@ -98,26 +98,72 @@ const modeMeta: { id: GameMode; icon: React.ReactNode }[] = [
 const levelIds: Difficulty[] = ["easy", "medium", "hard"];
 
 function Panel({
+  id,
   title,
   icon,
   children,
   badge,
+  defaultOpen = true,
 }: {
+  id: string;
   title: string;
   icon?: React.ReactNode;
   children: React.ReactNode;
   badge?: React.ReactNode;
+  defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined" || typeof localStorage === "undefined") return defaultOpen;
+    try {
+      const raw = localStorage.getItem("aadu-puli-panels-collapsed");
+      if (!raw) return defaultOpen;
+      const collapsed = JSON.parse(raw) as string[];
+      return Array.isArray(collapsed) ? !collapsed.includes(id) : defaultOpen;
+    } catch {
+      return defaultOpen;
+    }
+  });
+
+  const toggle = () => {
+    setOpen((v) => {
+      const next = !v;
+      try {
+        const raw = localStorage.getItem("aadu-puli-panels-collapsed");
+        const collapsed = raw ? (JSON.parse(raw) as string[]) : [];
+        const set = new Set(Array.isArray(collapsed) ? collapsed : []);
+        if (next) set.delete(id);
+        else set.add(id);
+        localStorage.setItem("aadu-puli-panels-collapsed", JSON.stringify([...set]));
+      } catch {
+        // ignore persistence errors
+      }
+      return next;
+    });
+  };
+
   return (
     <section className="glass-card t-panel rounded-3xl p-4 shadow-2xl transition-all duration-300">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {icon}
           <h2 className="t-panel-title text-xs font-black uppercase tracking-[0.2em]">{title}</h2>
         </div>
-        {badge}
+        <div className="flex items-center gap-2">
+          {badge}
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={open}
+            aria-label={open ? `Collapse ${title}` : `Expand ${title}`}
+            className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-stone-400 transition-all hover:bg-stone-800 hover:text-white"
+          >
+            <ChevronDown
+              className={`h-4 w-4 transition-transform duration-300 ${open ? "" : "-rotate-90"}`}
+            />
+          </button>
+        </div>
       </div>
-      {children}
+      {open && <div className="mt-3">{children}</div>}
     </section>
   );
 }
@@ -189,6 +235,7 @@ export function Sidebar(p: Props) {
     <aside className="rise rise-1 flex w-full flex-col gap-4.5 lg:max-w-sm">
       {/* Live Match Status Panel */}
       <Panel
+        id="status"
         title={t.liveStatus}
         icon={<Trophy className="h-4 w-4 t-accent-text" />}
         badge={
@@ -275,37 +322,34 @@ export function Sidebar(p: Props) {
         </div>
 
         {/* Quick Analytics Summary */}
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-          <div className="rounded-2xl border border-white/5 bg-stone-950/70 p-2.5">
-            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">
-              {t.availMoves}
-            </div>
-            <div className="mt-1 flex items-baseline gap-1 text-lg font-black t-accent-text">
-              <span>{p.legalMovesCount ?? 0}</span>
-              <span className="text-[10px] font-normal text-stone-500">{t.legalOptions}</span>
-            </div>
+        <div className="mt-3 rounded-2xl border border-white/5 bg-stone-950/70 p-2.5">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">
+            {t.availMoves}
           </div>
-
-          <div className="rounded-2xl border border-white/5 bg-stone-950/70 p-2.5">
-            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">
-              {t.tacRec}
-            </div>
-            <div className="mt-1 line-clamp-1 text-xs font-black text-emerald-300">
-              {p.suggestedMove || t.analyzing}
-            </div>
+          <div className="mt-1 flex items-baseline gap-2 text-lg font-black t-accent-text">
+            <span>{p.legalMovesCount ?? 0}</span>
+            <span className="text-[10px] font-normal text-stone-500">{t.legalOptions}</span>
           </div>
         </div>
       </Panel>
 
       {/* AI Tactical Coach Read */}
-      <Panel title={t.coachTitle} icon={<Sparkles className="h-4 w-4 text-emerald-400" />}>
+      <Panel
+        id="coach"
+        title={t.coachTitle}
+        icon={<Sparkles className="h-4 w-4 text-emerald-400" />}
+      >
         <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs leading-relaxed text-emerald-100">
           {p.coachInsight}
         </div>
       </Panel>
 
       {/* Battle Scoreboard Panel */}
-      <Panel title={t.scoreboard} icon={<ShieldAlert className="h-4 w-4 t-accent-text" />}>
+      <Panel
+        id="scoreboard"
+        title={t.scoreboard}
+        icon={<ShieldAlert className="h-4 w-4 t-accent-text" />}
+      >
         <div className="grid grid-cols-2 gap-3 text-xs">
           {/* Goats Placement Progress */}
           <div className="rounded-2xl border border-white/5 bg-stone-950/70 p-3">
@@ -405,12 +449,21 @@ export function Sidebar(p: Props) {
       </Panel>
 
       {/* Match Analytics Panel */}
-      <Panel title={t.analyticsTitle} icon={<BarChart3 className="h-4 w-4 t-accent-text" />}>
+      <Panel
+        id="analytics"
+        defaultOpen={false}
+        title={t.analyticsTitle}
+        icon={<BarChart3 className="h-4 w-4 t-accent-text" />}
+      >
         <StatsCharts records={p.records} />
       </Panel>
 
       {/* Game Mode & AI Setup Panel */}
-      <Panel title={t.controlsTitle} icon={<BrainCircuit className="h-4 w-4 t-accent-text" />}>
+      <Panel
+        id="controls"
+        title={t.controlsTitle}
+        icon={<BrainCircuit className="h-4 w-4 t-accent-text" />}
+      >
         {/* Challenge Mode Banner */}
         <div className="t-chip mb-3 flex items-center justify-between rounded-2xl px-3.5 py-2">
           <div className="flex items-center gap-2">
@@ -527,6 +580,7 @@ export function Sidebar(p: Props) {
 
       {/* Multiplayer Room Sharing Link Panel */}
       <Panel
+        id="invite"
         title={p.mode === "online" ? t.inviteOnline : t.inviteLocal}
         icon={<Users className="h-4 w-4 text-sky-400" />}
         badge={<ConnectionDot />}
@@ -577,7 +631,7 @@ export function Sidebar(p: Props) {
       </Panel>
 
       {/* Move History Feed Panel */}
-      <Panel title={t.history} icon={<History className="h-4 w-4 t-accent-text" />}>
+      <Panel id="history" title={t.history} icon={<History className="h-4 w-4 t-accent-text" />}>
         {/* Replay stepper */}
         {p.replayTotal > 0 && (
           <div className="mb-2.5 flex items-center gap-1.5 rounded-xl border border-white/10 bg-stone-950/70 p-1.5">
@@ -662,12 +716,11 @@ export function Sidebar(p: Props) {
         </button>
 
         <button
-          onClick={p.onHint}
-          disabled={!p.canHint}
-          className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-3 text-xs font-black uppercase tracking-wider text-emerald-950 shadow-xl shadow-emerald-950/40 transition-all disabled:opacity-30 hover:scale-[1.02] active:scale-95"
+          onClick={p.onTour}
+          className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-3 text-xs font-black uppercase tracking-wider text-emerald-950 shadow-xl shadow-emerald-950/40 transition-all hover:scale-[1.02] active:scale-95"
         >
-          <Sparkles className="h-4 w-4 text-emerald-100" />
-          <span className="text-emerald-100">{t.hintBtn}</span>
+          <GraduationCap className="h-4 w-4 text-emerald-100" />
+          <span className="text-emerald-100">{t.tourKicker}</span>
         </button>
 
         <button

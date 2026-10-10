@@ -1218,6 +1218,27 @@ function Page() {
               turnTimeLimit={timeoutSecs}
               onNodeClick={handleNode}
             />
+            {/* Tactical Hint — beside the board */}
+            <div className="glass-card t-panel mt-3 flex w-full max-w-[620px] items-center gap-3 rounded-2xl p-3">
+              <div className="t-icon-tile flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
+                <Sparkles className="h-4 w-4 t-accent-text" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="t-panel-title text-[10px] font-black uppercase tracking-[0.2em]">
+                  {t.tacRec}
+                </div>
+                <div className="truncate text-xs font-bold text-stone-200">
+                  {thinking ? t.thinking : suggestedMoveText}
+                </div>
+              </div>
+              <button
+                onClick={showHint}
+                disabled={!!state.winner || thinking || isAiTurn || viewingIndex != null}
+                className="t-btn-primary shrink-0 rounded-xl px-4 py-2 text-[11px] font-black uppercase tracking-wider transition-all disabled:opacity-30 hover:scale-105 active:scale-95"
+              >
+                {t.hintBtn}
+              </button>
+            </div>
           </div>
 
           <Sidebar
@@ -1229,9 +1250,7 @@ function Page() {
             log={log}
             thinking={thinking}
             canUndo={history.length > 1 && !thinking}
-            canHint={!state.winner && !thinking && !isAiTurn}
             legalMovesCount={turnMoves.length}
-            suggestedMove={suggestedMoveText}
             coachInsight={coachInsight}
             turnTimeLeft={turnTimeLeft}
             turnTimeLimit={timeoutSecs}
@@ -1263,7 +1282,7 @@ function Page() {
             onNewGame={newGame}
             onReset={newGame}
             onUndo={undo}
-            onHint={showHint}
+            onTour={() => setShowTutorial(true)}
           />
         </div>
       </div>
