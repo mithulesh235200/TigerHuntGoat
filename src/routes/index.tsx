@@ -19,6 +19,7 @@ import {
 
 import { GameBoard } from "@/components/game/GameBoard";
 import { TigerFaceMark } from "@/components/game/TigerFace";
+import { GoatFaceMark } from "@/components/game/GoatFace";
 import { Confetti } from "@/components/game/Confetti";
 import { PwaBadges } from "@/components/game/PwaBadges";
 import { ThemePicker } from "@/components/game/ThemePicker";
@@ -1145,7 +1146,7 @@ function Page() {
             </div>
 
             <div className="flex flex-col items-center gap-1">
-              {state.winner === "tiger" && <TigerFaceMark size={64} />}
+              {state.winner === "tiger" ? <TigerFaceMark size={64} /> : <GoatFaceMark size={64} />}
               <h3 className="t-text-gradient mt-2 text-3xl font-black">
                 {state.winner === "tiger" ? t.tigerWins : t.goatWins}
               </h3>

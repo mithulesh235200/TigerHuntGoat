@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { EDGES, LABELS, POINTS } from "@/lib/game/board";
 import type { GameState, Move } from "@/lib/game/engine";
 import { TigerFaceArt } from "@/components/game/TigerFace";
+import { GoatFaceArt } from "@/components/game/GoatFace";
 import { useLang } from "@/lib/i18n";
 import { prefersReducedMotion } from "@/lib/device";
 
@@ -482,129 +483,9 @@ export function GameBoard({
                         <TigerFaceArt />
                       </g>
                     ) : (
-                      /* Realistic Goat Face Emblem */
-                      <g
-                        transform={`translate(${px(i)}, ${py(i)})`}
-                        className="stroke-emerald-950"
-                        strokeWidth={2}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        {/* Ridged curved horns */}
-                        <path
-                          d="M -7 -9 C -17 -13 -21 -24 -13 -30 C -11 -31 -9 -30 -9 -28 C -13 -24 -12 -17 -5 -13 Z"
-                          fill="#d6d3d1"
-                          stroke="#57534e"
-                          strokeWidth={1.4}
-                        />
-                        <path
-                          d="M 7 -9 C 17 -13 21 -24 13 -30 C 11 -31 9 -30 9 -28 C 13 -24 12 -17 5 -13 Z"
-                          fill="#d6d3d1"
-                          stroke="#57534e"
-                          strokeWidth={1.4}
-                        />
-                        <path
-                          d="M -15 -22 L -10 -20 M -16 -18 L -11 -16"
-                          stroke="#78716c"
-                          strokeWidth={1.2}
-                        />
-                        <path
-                          d="M 15 -22 L 10 -20 M 16 -18 L 11 -16"
-                          stroke="#78716c"
-                          strokeWidth={1.2}
-                        />
-                        {/* Drooping ears */}
-                        <path
-                          d="M -11 0 L -22 3 L -20 9 L -10 6 Z"
-                          fill="#e7e5e4"
-                          stroke="#a8a29e"
-                          strokeWidth={1.2}
-                        />
-                        <path
-                          d="M 11 0 L 22 3 L 20 9 L 10 6 Z"
-                          fill="#e7e5e4"
-                          stroke="#a8a29e"
-                          strokeWidth={1.2}
-                        />
-                        {/* Head */}
-                        <ellipse
-                          cx={0}
-                          cy={2}
-                          rx={10}
-                          ry={12}
-                          fill="#fafaf9"
-                          stroke="#a8a29e"
-                          strokeWidth={1.5}
-                        />
-                        {/* Forelock tuft */}
-                        <path
-                          d="M -6 -8 L -3 -13 L 0 -8 L 3 -13 L 6 -8 Z"
-                          fill="#e7e5e4"
-                          stroke="#a8a29e"
-                          strokeWidth={1}
-                        />
-                        {/* Eyes with horizontal slit pupils */}
-                        <ellipse
-                          cx={-4.5}
-                          cy={0}
-                          rx={2.8}
-                          ry={2.4}
-                          fill="#ffffff"
-                          stroke="#57534e"
-                          strokeWidth={1}
-                        />
-                        <ellipse
-                          cx={4.5}
-                          cy={0}
-                          rx={2.8}
-                          ry={2.4}
-                          fill="#ffffff"
-                          stroke="#57534e"
-                          strokeWidth={1}
-                        />
-                        <rect
-                          x={-6.9}
-                          y={-0.9}
-                          width={4.8}
-                          height={1.8}
-                          rx={0.9}
-                          fill="#1c1917"
-                          stroke="none"
-                        />
-                        <rect
-                          x={2.1}
-                          y={-0.9}
-                          width={4.8}
-                          height={1.8}
-                          rx={0.9}
-                          fill="#1c1917"
-                          stroke="none"
-                        />
-                        {/* Nose */}
-                        <ellipse
-                          cx={0}
-                          cy={7.5}
-                          rx={3.2}
-                          ry={2.4}
-                          fill="#d6a08e"
-                          stroke="#78716c"
-                          strokeWidth={1}
-                        />
-                        <circle cx={-1.3} cy={7.5} r={0.5} fill="#57534e" stroke="none" />
-                        <circle cx={1.3} cy={7.5} r={0.5} fill="#57534e" stroke="none" />
-                        {/* Mouth + goatee beard */}
-                        <path
-                          d="M -3 11 Q 0 13 3 11"
-                          fill="none"
-                          stroke="#57534e"
-                          strokeWidth={1.4}
-                        />
-                        <path
-                          d="M -2.5 12.5 L 0 20 L 2.5 12.5 Z"
-                          fill="#e7e5e4"
-                          stroke="#a8a29e"
-                          strokeWidth={1}
-                        />
+                      /* Realistic goat face — the app's single goat look */
+                      <g transform={`translate(${px(i)}, ${py(i)})`}>
+                        <GoatFaceArt />
                       </g>
                     )}
                   </g>

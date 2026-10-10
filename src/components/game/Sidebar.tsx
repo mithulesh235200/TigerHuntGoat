@@ -1,5 +1,6 @@
 import { CAPTURES_TO_WIN, TOTAL_GOATS, type GameState } from "@/lib/game/engine";
 import { TigerFaceMark } from "@/components/game/TigerFace";
+import { GoatFaceMark } from "@/components/game/GoatFace";
 import type { Difficulty } from "@/lib/game/ai";
 import type { ThemeId } from "@/lib/theme";
 import { ThemePicker } from "@/components/game/ThemePicker";
@@ -450,7 +451,10 @@ export function Sidebar(p: Props) {
             }`}
           >
             {state.turn === "tiger" && <TigerFaceMark size={18} />}
-            {state.turn === "tiger" ? t.tigerTurn.replace("🐯 ", "").replace("🐯", "") : t.goatTurn}
+            {state.turn === "goat" && <GoatFaceMark size={18} />}
+            {state.turn === "tiger"
+              ? t.tigerTurn.replace("🐯 ", "").replace("🐯", "")
+              : t.goatTurn.replace("🐐 ", "").replace("🐐", "")}
           </span>
         </div>
 
@@ -582,7 +586,8 @@ export function Sidebar(p: Props) {
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-stone-400">
               {t.herdOnGrid}
             </div>
-            <div className="mt-0.5 text-base font-black text-emerald-300">
+            <div className="mt-0.5 flex items-center gap-1.5 text-base font-black text-emerald-300">
+              <GoatFaceMark size={20} />
               {goatsOnBoard} {t.goatsUnit}
             </div>
           </div>
