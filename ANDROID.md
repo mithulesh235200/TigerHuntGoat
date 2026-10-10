@@ -20,26 +20,27 @@ The web app is a full PWA: `manifest.webmanifest`, `sw.js` service worker
 A Capacitor project is scaffolded in `android/` (`appId: com.aadupuli.aatam`).
 
 ```bash
-npm run build
-npm run android:export   # copies build into android-www/
-npm run android:sync     # syncs into android/app/src/main/assets
+npm run android:build    # server build + snapshot + sync, in one step
 npm run android:open     # opens Android Studio → Run / Build APK
 ```
 
-Notes:
-- `npm run android:build` does build + export + sync in one step.
-- `android-www/index.html` is a fallback loader pointing at your deployed URL
-  (set `PROD_URL=https://your-app.vercel.app` when exporting). A prerendered
-  snapshot is attempted only with `ANDROID_SNAPSHOT=1`, because
-  `vite preview` is broken in this repo snapshot (pre-existing HTTP 500 from
-  missing `dist/server/server.js`).
-- Online rooms use Supabase realtime and need internet; vs-AI and hotseat
-  modes are local and work offline.
+How it works: `android:export` builds a runnable node server
+(`NITRO_PRESET=node-server`), boots it, and snapshots the real SSR `/`
+HTML into `android-www/index.html` next to the static assets — so the
+bundle on-device is the actual game, playable fully offline (vs AI +
+hotseat). Then `cap sync` copies it into `android/`.
+
+Local preview: `npm run preview:static` serves the bundle on
+http://localhost:4173 (zero dependencies).
+Note: plain `vite preview` does NOT work in this repo snapshot — it expects
+`dist/server/server.js`, which the nitro/vercel build never emits. That is an
+upstream template issue, not a game bug; `preview:static` is the supported
+local preview.
 
 ## Next updates checklist (for the following iteration)
 
 - [x] App icons are drawn tiger/goat artwork (`node scripts/make-icons.mjs` regenerates them; maskable = goat)
-- [ ] Add Play-store screenshots + feature graphic
-- [ ] Verify `vite preview` 500 fix after upstream template update, then enable
-      static snapshot by default in `scripts/export-android.mjs`
+- [x] Real offline Capacitor bundle (`npm run android:build` snapshots SSR HTML)
+- [ ] Play-store screenshots: `node store/screenshots.mjs` (needs Playwright
+      Chromium once) + convert `store/feature-graphic.svg` to 1024×500 PNG
 - [ ] Optional: push notifications / deep links for online-room invites

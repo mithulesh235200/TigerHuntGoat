@@ -14,7 +14,8 @@
     "android:sync": "cap sync android",
     "android:open": "cap open android",
     "android:export": "node scripts/export-android.mjs",
-    "android:build": "npm run build && node scripts/export-android.mjs && cap sync android"
+    "android:build": "node scripts/export-android.mjs && cap sync android",
+    "preview:static": "node scripts/preview-static.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",

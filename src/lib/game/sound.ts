@@ -29,11 +29,14 @@ function tone(freq: number, duration: number, type: OscillatorType, gain = 0.12,
   osc.stop(t0 + duration + 0.02);
 }
 
-export type SoundName = "place" | "move" | "capture" | "invalid" | "win" | "lose";
+export type SoundName = "place" | "move" | "capture" | "invalid" | "win" | "lose" | "select";
 
 export function playSound(name: SoundName, muted: boolean) {
   if (muted) return;
   switch (name) {
+    case "select":
+      tone(660, 0.07, "sine", 0.07);
+      break;
     case "place":
       tone(520, 0.12, "sine");
       break;

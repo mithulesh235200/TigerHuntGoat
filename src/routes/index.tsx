@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { GameBoard } from "@/components/game/GameBoard";
+import { Confetti } from "@/components/game/Confetti";
 import { PwaBadges } from "@/components/game/PwaBadges";
 import { ThemePicker } from "@/components/game/ThemePicker";
 import { Tutorial } from "@/components/game/Tutorial";
@@ -258,13 +259,16 @@ function Page() {
       .on("broadcast", { event: "state" }, ({ payload }) => {
         if (payload.senderRole === onlineRole || !payload.history?.length) return;
         receivedOnlineState.current = true;
-        setHistory(payload.history as GameState[]);
+        const incoming = payload.history as GameState[];
+        const wasLive = historyRef.current.length > 1 && incoming.length === 1;
+        setHistory(incoming);
         setLog((payload.log as string[]) ?? []);
         setLastMove((payload.lastMove as Move | null) ?? null);
         setHint(null);
         setSelected(null);
         setTargets([]);
-        setStatus(t.sOpponentMoved);
+        setViewingIndex(null);
+        setStatus(wasLive ? t.sRematch : t.sOpponentMoved);
       })
       .on("broadcast", { event: "request-state" }, () => {
         if (onlineRole !== "goat") return;
@@ -651,6 +655,7 @@ function Page() {
         buzz(25);
         setStatus(t.sNoDest);
       } else {
+        playSound("select", muted);
         setStatus(t.sChooseDest);
       }
       return;
@@ -902,7 +907,7 @@ function Page() {
       {/* Rules & How-To-Play Dialog Modal */}
       {showRulesModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/85 p-4 backdrop-blur-md">
-          <div className="t-board-frame t-overlay-card relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-gradient-to-b from-stone-900 via-stone-950 to-stone-950 p-6 sm:p-8">
+          <div className="t-board-frame t-overlay-card overlay-pop relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-gradient-to-b from-stone-900 via-stone-950 to-stone-950 p-6 sm:p-8">
             <button
               onClick={() => setShowRulesModal(false)}
               className="absolute right-6 top-6 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-stone-900 text-stone-400 transition-colors hover:bg-stone-800 hover:text-white"
@@ -1011,7 +1016,7 @@ function Page() {
       {/* Initial Match Setup Overlay */}
       {!gameStarted && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-stone-950/85 px-4 py-6 backdrop-blur-md">
-          <div className="t-board-frame t-overlay-card w-full max-w-2xl rounded-3xl bg-gradient-to-b from-stone-900 via-stone-950 to-stone-950 p-6 text-center ring-1 ring-white/10 sm:p-8">
+          <div className="t-board-frame t-overlay-card overlay-pop w-full max-w-2xl rounded-3xl bg-gradient-to-b from-stone-900 via-stone-950 to-stone-950 p-6 text-center ring-1 ring-white/10 sm:p-8">
             <div className="t-chip inline-flex items-center gap-2 rounded-full px-3.5 py-1 text-[10px] font-bold uppercase tracking-[0.32em]">
               <Sparkles className="h-3.5 w-3.5" />
               {t.setupKicker}
@@ -1131,7 +1136,8 @@ function Page() {
       {/* Match Complete Victory Celebration Overlay */}
       {state.winner && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/80 px-4 backdrop-blur-md">
-          <div className="t-board-frame t-overlay-card w-full max-w-md rounded-3xl bg-gradient-to-b from-stone-900 via-stone-950 to-stone-950 p-8 text-center ring-1 ring-white/10">
+          <div className="t-board-frame t-overlay-card overlay-pop relative w-full max-w-md overflow-hidden rounded-3xl bg-gradient-to-b from-stone-900 via-stone-950 to-stone-950 p-8 text-center ring-1 ring-white/10">
+            <Confetti winner={state.winner} seed={summary.totalMoves} />
             <div className="t-chip inline-flex items-center gap-2 rounded-full px-3.5 py-1 text-[10px] font-bold uppercase tracking-[0.28em]">
               <Trophy className="h-4 w-4 animate-bounce" />
               {t.victoryKicker}
@@ -1193,7 +1199,7 @@ function Page() {
       {/* Main Game Section */}
       <div className="mx-auto max-w-7xl px-4 pt-6 lg:px-8">
         <div className="flex flex-col items-center gap-8 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex w-full flex-1 flex-col items-center justify-center">
+          <div className="rise flex w-full flex-1 flex-col items-center justify-center">
             <GameBoard
               state={boardState}
               selected={viewingIndex == null ? selected : null}

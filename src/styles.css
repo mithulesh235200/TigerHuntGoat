@@ -510,3 +510,169 @@ html[data-theme] ::-webkit-scrollbar-thumb:hover {
     display: none;
   }
 }
+
+/* ============ Interaction design: motion, feedback, delight ============ */
+/* Piece landing physics (class toggles to the just-moved piece, retriggering). */
+@keyframes piece-land {
+  0% {
+    transform: scale(1.45);
+    opacity: 0.4;
+  }
+  60% {
+    transform: scale(0.94);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.piece-land {
+  animation: piece-land 0.38s cubic-bezier(0.2, 0.9, 0.25, 1.2);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Capture shockwave on the captured square. */
+@keyframes capture-poof {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+.capture-poof {
+  animation: capture-poof 0.55s ease-out both;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Board nodes: hover lift + keyboard focus ring. */
+.board-node {
+  transition: transform 0.18s ease;
+  transform-box: fill-box;
+}
+@media (hover: hover) {
+  .board-node-interactive:hover {
+    transform: translateY(-3px);
+  }
+}
+.board-node:focus-visible {
+  outline: 2px solid var(--a3);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+
+/* Turn-reactive aura behind the board (theme-aware). */
+.board-turn-tiger .t-board-aura {
+  background: linear-gradient(135deg, var(--a-chip), transparent 55%, rgba(245, 158, 11, 0.16));
+}
+.board-turn-goat .t-board-aura {
+  background: linear-gradient(135deg, var(--a-chip), transparent 55%, rgba(16, 185, 129, 0.16));
+}
+
+/* Staggered section entrances. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise-in 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+.rise-1 {
+  animation-delay: 0.06s;
+}
+.rise-2 {
+  animation-delay: 0.12s;
+}
+.rise-3 {
+  animation-delay: 0.18s;
+}
+
+/* Status line flashes on every new message (key change retriggers). */
+@keyframes status-flash {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+.status-flash {
+  animation: status-flash 0.3s ease;
+}
+
+/* Overlay cards pop in. */
+@keyframes overlay-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.92) translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+.overlay-pop {
+  animation: overlay-pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+}
+
+/* Move feed entries slide in on mount. */
+@keyframes feed-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.feed-enter {
+  animation: feed-in 0.3s ease both;
+}
+
+/* Victory confetti (deterministic pieces, no JS randomness). */
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-6vh) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(108vh) rotate(720deg);
+    opacity: 0.55;
+  }
+}
+.confetti-piece {
+  position: absolute;
+  top: -6vh;
+  animation-name: confetti-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  pointer-events: none;
+}
+
+/* Smooth theme switching across surfaces. */
+.t-panel,
+.glass-card,
+.t-chip,
+.t-btn-primary,
+.t-icon-tile,
+.t-board-frame {
+  transition:
+    background-color 0.35s ease,
+    border-color 0.35s ease,
+    box-shadow 0.35s ease,
+    filter 0.2s ease,
+    transform 0.15s ease;
+}

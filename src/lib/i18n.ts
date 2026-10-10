@@ -235,6 +235,7 @@ const en = {
   sOfflinePause: "You are offline. Online rooms are paused — vs AI and 2-player work offline.",
   sOfflineSwitch: "You are offline. Online rooms need internet — starting local 2-player instead.",
   sOpponentMoved: "Opponent moved. Your turn!",
+  sRematch: "Opponent started a new game — rematch!",
   sTigerWin: "Tigers captured 5 goats and win the hunt!",
   sGoatWin: "All tigers are trapped — the goats win!",
   sForfeitTigerWin: "Goats ran out of time — the Tigers win!",
@@ -472,6 +473,7 @@ const ta: Strings = {
   sOfflineSwitch:
     "நீங்கள் ஆஃப்லைனில் உள்ளீர்கள். ஆன்லைன் அறைகளுக்கு இணையம் தேவை — உள்ளூர் 2-வீரர் தொடங்குகிறது.",
   sOpponentMoved: "எதிராளி நகர்ந்துவிட்டார். உங்கள் முறை!",
+  sRematch: "எதிராளி புதிய ஆட்டத்தைத் தொடங்கினார் — மறுபோட்டி!",
   sTigerWin: "புலிகள் 5 ஆடுகளைப் பிடித்து வேட்டையில் வென்றன!",
   sGoatWin: "அனைத்துப் புலிகளும் சிக்கின — ஆடுகள் வென்றன!",
   sForfeitTigerWin: "ஆடுகளுக்கு நேரம் முடிந்தது — புலிகள் வென்றன!",

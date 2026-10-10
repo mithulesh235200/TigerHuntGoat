@@ -186,7 +186,7 @@ export function Sidebar(p: Props) {
         : "from-emerald-500 to-teal-400";
 
   return (
-    <aside className="flex w-full flex-col gap-4.5 lg:max-w-sm">
+    <aside className="rise rise-1 flex w-full flex-col gap-4.5 lg:max-w-sm">
       {/* Live Match Status Panel */}
       <Panel
         title={t.liveStatus}
@@ -239,9 +239,10 @@ export function Sidebar(p: Props) {
             </div>
           ) : (
             <p
+              key={p.log.length}
               aria-live="polite"
               aria-atomic="true"
-              className="text-xs font-semibold leading-relaxed text-stone-200"
+              className="status-flash text-xs font-semibold leading-relaxed text-stone-200"
             >
               {p.status}
             </p>
@@ -632,7 +633,7 @@ export function Sidebar(p: Props) {
             return (
               <li
                 key={i}
-                className={`flex items-center justify-between rounded-xl border px-3 py-1.5 transition-all ${
+                className={`feed-enter flex items-center justify-between rounded-xl border px-3 py-1.5 transition-all ${
                   isCapture
                     ? "border-rose-500/30 bg-rose-500/10 text-rose-200"
                     : isPlacement

@@ -1,6 +1,8 @@
+import { useEffect, useRef } from "react";
 import { EDGES, LABELS, POINTS } from "@/lib/game/board";
 import type { GameState, Move } from "@/lib/game/engine";
 import { useLang } from "@/lib/i18n";
+import { prefersReducedMotion } from "@/lib/device";
 
 const PAD = 52;
 const STEP = 96;
@@ -59,8 +61,28 @@ export function GameBoard({
   const timerRatio = turnTimeLimit && turnTimeLeft !== undefined ? turnTimeLeft / turnTimeLimit : 1;
   const timeUrgent = interactive && turnTimeLeft !== undefined && timerRatio <= 0.27;
 
+  // Capture shake via WAAPI: retriggers on every capture, no remounts, no focus loss.
+  const frameRef = useRef<HTMLDivElement>(null);
+  const prevLastMove = useRef<Move | null>(null);
+  useEffect(() => {
+    const prev = prevLastMove.current;
+    prevLastMove.current = lastMove;
+    if (!lastMove || lastMove === prev || lastMove.kind !== "capture") return;
+    if (prefersReducedMotion()) return;
+    frameRef.current?.animate(
+      [
+        { transform: "translate(0, 0)" },
+        { transform: "translate(-5px, 3px)" },
+        { transform: "translate(5px, -3px)" },
+        { transform: "translate(-2px, -1px)" },
+        { transform: "translate(0, 0)" },
+      ],
+      { duration: 320, easing: "ease-out" },
+    );
+  }, [lastMove]);
+
   return (
-    <div className="relative w-full max-w-[620px] p-2">
+    <div className={`relative w-full max-w-[620px] p-2 board-turn-${state.turn}`}>
       {/* Top Floating Match Header Chips */}
       <div className="pointer-events-none absolute left-6 top-6 z-10 flex flex-wrap items-center gap-2">
         <div
@@ -84,7 +106,10 @@ export function GameBoard({
       <div className="t-board-aura absolute -inset-2 rounded-[3rem] opacity-70 blur-2xl transition-all duration-700 hover:opacity-100" />
 
       {/* Main SVG Game Board */}
-      <div className="t-board-frame relative overflow-hidden rounded-[2.5rem] bg-gradient-to-b from-stone-950 via-zinc-950 to-stone-950 p-3 ring-1 ring-white/10 backdrop-blur-xl">
+      <div
+        ref={frameRef}
+        className="t-board-frame relative overflow-hidden rounded-[2.5rem] bg-gradient-to-b from-stone-950 via-zinc-950 to-stone-950 p-3 ring-1 ring-white/10 backdrop-blur-xl"
+      >
         <svg
           viewBox={`0 0 ${W} ${H}`}
           className={`w-full select-none rounded-[2rem] transition-all duration-500 ${
@@ -252,6 +277,20 @@ export function GameBoard({
             </g>
           )}
 
+          {/* Capture shockwave on the captured square */}
+          {lastMove?.kind === "capture" && (
+            <circle
+              key={`poof-${lastMove.from}-${lastMove.over}-${lastMove.to}`}
+              cx={px(lastMove.over)}
+              cy={py(lastMove.over)}
+              r={22}
+              fill="none"
+              stroke="#f43f5e"
+              strokeWidth={3}
+              className="capture-poof"
+            />
+          )}
+
           {/* Tactical Hint Indicator Path */}
           {hintTo !== null && (
             <g>
@@ -315,8 +354,8 @@ export function GameBoard({
                 aria-disabled={!isNodeInteractive}
                 role="button"
                 tabIndex={isNodeInteractive ? 0 : -1}
-                className={`group transition-all duration-300 ${
-                  isNodeInteractive ? "cursor-pointer" : "cursor-default"
+                className={`group board-node transition-all duration-300 ${
+                  isNodeInteractive ? "board-node-interactive cursor-pointer" : "cursor-default"
                 }`}
               >
                 {/* Touch/Mouse Large Hit Target Area */}
@@ -378,7 +417,7 @@ export function GameBoard({
                 {cell !== "empty" && (
                   <g
                     filter="url(#pieceShadow)"
-                    className={`transition-all duration-300 ${
+                    className={`transition-all duration-300 ${isLast ? "piece-land" : ""} ${
                       isSelected ? "scale-125" : "hover:scale-110"
                     }`}
                     style={{

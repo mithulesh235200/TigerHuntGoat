@@ -1,76 +1,82 @@
 // Builds the local web bundle for Capacitor (android-www/).
-// 1. Copies the built static output (.vercel/output/static or .output/public).
-// 2. Tries to snapshot SSR "/" HTML via `vite preview` as android-www/index.html.
-//    NOTE: `vite preview` is currently broken in this repo (pre-existing issue:
-//    missing dist/server/server.js, HTTP 500). If the snapshot fails, a
-//    fallback loader page is written instead and the script still exits 0.
-//    For a fully-offline native APK, use the PWABuilder flow in ANDROID.md
-//    (recommended), or serve the deployed PWA URL via Capacitor server.url.
+// Strategy: build a runnable node server (NITRO_PRESET=node-server),
+// boot it, snapshot the SSR "/" HTML (proven 200), and combine it with
+// the static assets. The game is 100% client-side after load, so the
+// snapshot + cached assets run fully offline on-device.
+// Falls back to a loader page if anything fails (exit 0, loud warning).
 import { spawn } from "node:child_process";
 import { cp, mkdir, writeFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { execSync } from "node:child_process";
 
 const root = process.cwd();
 const www = path.join(root, "android-www");
-const candidates = [
-  path.join(root, ".vercel", "output", "static"),
-  path.join(root, ".output", "public"),
-];
-const pub = candidates.find((p) => existsSync(p));
 const PROD_URL = process.env.PROD_URL || "https://your-deployed-app.vercel.app";
 
+function fail(msg) {
+  console.warn(`[android-www] WARNING: ${msg}`);
+  console.warn("[android-www] Writing fallback loader page.");
+  console.warn("[android-www] For a fully-offline APK use the PWABuilder flow (see ANDROID.md).");
+}
+
 async function main() {
-  if (!pub) {
-    throw new Error('Run "npm run build" first — no static output found.');
-  }
   await rm(www, { recursive: true, force: true });
   await mkdir(www, { recursive: true });
-  await cp(pub, www, { recursive: true });
 
-  const port = 4173;
-  // `vite preview` is broken in this repo snapshot (HTTP 500, missing
-  // dist/server/server.js) — only attempt a live snapshot when explicitly
-  // requested via ANDROID_SNAPSHOT=1 (e.g. on a machine where preview works).
-  if (process.env.ANDROID_SNAPSHOT !== "1") {
-    console.warn("[android-www] WARNING: snapshot skipped (preview broken in this env).");
-    console.warn("[android-www] Writing fallback loader page.");
-    console.warn("[android-www] For fully-offline APK use the PWABuilder flow (see ANDROID.md).");
+  // 1. Server build (skips prerender; PRERENDER stays unset).
+  try {
+    execSync("npm run build", {
+      cwd: root,
+      env: { ...process.env, NITRO_PRESET: "node-server" },
+      stdio: "ignore",
+    });
+  } catch {
+    fail("node-server build failed.");
     await writeFile(path.join(www, "index.html"), fallbackHtml(), "utf8");
     process.exit(0);
     return;
   }
-  const child = spawn("npx vite preview --port " + port, {
+
+  const pubCandidates = [path.join(root, ".output", "public")];
+  const pub = pubCandidates.find((p) => existsSync(p));
+  const serverEntry = path.join(root, ".output", "server", "index.mjs");
+  if (!pub || !existsSync(serverEntry)) {
+    fail("build output missing.");
+    await writeFile(path.join(www, "index.html"), fallbackHtml(), "utf8");
+    process.exit(0);
+    return;
+  }
+  await cp(pub, www, { recursive: true });
+
+  // 2. Boot + snapshot.
+  const port = 4173;
+  const child = spawn(process.execPath, [serverEntry], {
+    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1" },
     stdio: "ignore",
-    shell: true,
-    windowsHide: true,
     detached: true,
+    windowsHide: true,
   });
   try {
     const ready = await waitForServer(port, 25000);
-    if (ready) {
-      const res = await fetch(`http://127.0.0.1:${port}/?source=capacitor`);
-      const html = await res.text();
-      if (res.ok && html.includes("<html")) {
-        await writeFile(path.join(www, "index.html"), html, "utf8");
-        console.log("[android-www] exported with prerendered index.html");
-        return;
-      }
-    }
-    throw new Error(`snapshot unavailable (preview HTTP issue)`);
+    if (!ready) throw new Error("server did not start");
+    const res = await fetch(`http://127.0.0.1:${port}/?source=capacitor`);
+    const html = await res.text();
+    if (!res.ok || !html.includes("<html")) throw new Error(`snapshot HTTP ${res.status}`);
+    await writeFile(path.join(www, "index.html"), html, "utf8");
+    console.log("[android-www] exported with prerendered index.html");
   } catch (e) {
-    console.warn(`[android-www] WARNING: ${e.message}. Writing fallback loader page.`);
-    console.warn("[android-www] For fully-offline APK use the PWABuilder flow (see ANDROID.md).");
+    fail(e.message || "snapshot failed");
     await writeFile(path.join(www, "index.html"), fallbackHtml(), "utf8");
   } finally {
     try {
-      if (process.platform === "win32" && child?.pid) {
-        const { execSync } = await import("node:child_process");
+      if (process.platform === "win32" && child.pid) {
         execSync(`taskkill /PID ${child.pid} /T /F`, { stdio: "ignore" });
       } else {
-        child?.kill();
+        child.kill();
       }
     } catch {}
+    await new Promise((r) => setTimeout(r, 500));
   }
   process.exit(0);
 }
@@ -104,7 +110,7 @@ function waitForServer(port, timeoutMs) {
       }
       setTimeout(tick, 400);
     };
-    setTimeout(tick, 1500);
+    setTimeout(tick, 1200);
   });
 }
 
