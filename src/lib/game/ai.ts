@@ -73,36 +73,55 @@ function actionScore(s: GameState, move: Move) {
   return immediate + evaluate(next);
 }
 
+function stateKey(s: GameState): string {
+  return `${s.cells.join("")}|${s.turn}|${s.goatsToPlace}|${s.goatsCaptured}|${s.winner ?? ""}`;
+}
+
 function ordered(s: GameState, moves: Move[]) {
   return [...moves].sort((a, b) => actionScore(s, b) - actionScore(s, a));
 }
 
-function minimax(s: GameState, depth: number, alpha: number, beta: number): number {
+function minimax(s: GameState, depth: number, alpha: number, beta: number, path: Set<string> = new Set()): number {
+  const key = stateKey(s);
+  // Cycle guard: if this exact position already appeared earlier in the current
+  // line, the play is looping forever — treat it as a draw instead of recursing.
+  if (path.has(key)) return 0;
   if (depth === 0 || s.winner) return evaluate(s);
-  const moves = ordered(s, legalMoves(s));
-  if (moves.length === 0) return evaluate(s);
 
-  if (s.turn === "tiger") {
-    let best = -Infinity;
+  path.add(key);
+  try {
+    const moves = ordered(s, legalMoves(s));
+    if (moves.length === 0) return evaluate(s);
+
+    if (s.turn === "tiger") {
+      let best = -Infinity;
+      for (const m of moves) {
+        best = Math.max(best, minimax(applyMove(s, m), depth - 1, alpha, beta, path));
+        alpha = Math.max(alpha, best);
+        if (beta <= alpha) break;
+      }
+      return best;
+    }
+    let best = Infinity;
     for (const m of moves) {
-      best = Math.max(best, minimax(applyMove(s, m), depth - 1, alpha, beta));
-      alpha = Math.max(alpha, best);
+      best = Math.min(best, minimax(applyMove(s, m), depth - 1, alpha, beta, path));
+      beta = Math.min(beta, best);
       if (beta <= alpha) break;
     }
     return best;
+  } finally {
+    path.delete(key);
   }
-  let best = Infinity;
-  for (const m of moves) {
-    best = Math.min(best, minimax(applyMove(s, m), depth - 1, alpha, beta));
-    beta = Math.min(beta, best);
-    if (beta <= alpha) break;
-  }
-  return best;
 }
 
 function limitMoves(s: GameState, moves: Move[], difficulty: Difficulty) {
+  // Prune the goat AI's candidate moves (both AI-vs-AI and human-hint paths use
+  // this). `evaluate` is written tiger-perspective (positive = good for tigers),
+  // so the GOAT must minimize while the TIGER must maximize.
   if (s.turn !== "goat" || difficulty === "easy") return moves;
-  const scored = moves.map((m) => ({ m, v: actionScore(s, m) })).sort((a, b) => b.v - a.v);
+  const scored = moves
+    .map((m) => ({ m, v: actionScore(s, m) }))
+    .sort((a, b) => a.v - b.v);
   const width = difficulty === "hard" ? 8 : 12;
   return scored.slice(0, width).map((x) => x.m);
 }
@@ -129,7 +148,7 @@ export function chooseMove(state: GameState, side: Side, difficulty: Difficulty)
   let beta = Infinity;
 
   for (const m of candidates) {
-    const v = minimax(applyMove(state, m), depth - 1, alpha, beta);
+    const v = minimax(applyMove(state, m), depth - 1, alpha, beta, new Set([stateKey(state)]));
     if (side === "tiger" ? v > bestVal : v < bestVal) {
       bestVal = v;
       bestMove = m;

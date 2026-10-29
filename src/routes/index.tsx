@@ -204,15 +204,29 @@ function Page() {
           sessionCount?: number;
           roomId?: string | null;
         };
-        if (parsed.history?.length) {
-          setHistory(parsed.history);
-          setLog(parsed.log ?? []);
-          if (parsed.mode) setMode(parsed.mode);
-          if (typeof parsed.challengeMode === "boolean") setChallengeMode(parsed.challengeMode);
-          if (parsed.sessionCount) setSessionCount(parsed.sessionCount);
-          if (parsed.roomId) setRoomId(parsed.roomId);
-          setGameStarted(true);
-          setStatus(t.sRestored);
+        if (parsed.history?.length && Array.isArray(parsed.history)) {
+          // Validate the shape before restoring — a corrupt/partial entry would
+          // otherwise crash the derived game state on the next render.
+          const validHistory = parsed.history.every(
+            (h) =>
+              h &&
+              Array.isArray(h.cells) &&
+              typeof h.turn === "string" &&
+              (h.turn === "goat" || h.turn === "tiger") &&
+              typeof h.goatsToPlace === "number" &&
+              typeof h.goatsCaptured === "number" &&
+              (h.winner === null || h.winner === "goat" || h.winner === "tiger"),
+          );
+          if (validHistory) {
+            setHistory(parsed.history);
+            setLog(parsed.log ?? []);
+            if (parsed.mode) setMode(parsed.mode);
+            if (typeof parsed.challengeMode === "boolean") setChallengeMode(parsed.challengeMode);
+            if (parsed.sessionCount) setSessionCount(parsed.sessionCount);
+            if (parsed.roomId) setRoomId(parsed.roomId);
+            setGameStarted(true);
+            setStatus(t.sRestored);
+          }
         }
       } catch {
         window.localStorage.removeItem(MATCH_KEY);
@@ -603,17 +617,33 @@ function Page() {
   // AI turn execution
   useEffect(() => {
     if (!isAiTurn || !aiSide) return;
+    let cancelled = false;
     setThinking(true);
     timer.current = setTimeout(() => {
-      const move = chooseMove(state, aiSide, difficulty);
-      setThinking(false);
-      if (!move) return;
-      commit(applyMove(state, move), move, aiSide);
+      try {
+        const move = chooseMove(state, aiSide, difficulty);
+        if (cancelled) return;
+        setThinking(false);
+        if (!move) {
+          // No legal move and no winner — the game state is terminal/invalid.
+          // Fail safe instead of leaving the board stuck on the AI turn.
+          if (!state.winner) setStatus(t.sNoLegal);
+          return;
+        }
+        commit(applyMove(state, move), move, aiSide);
+      } catch (error) {
+        console.error("AI move failed", error);
+        if (!cancelled) {
+          setThinking(false);
+          setStatus(t.sNoLegal);
+        }
+      }
     }, 350);
     return () => {
+      cancelled = true;
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [isAiTurn, aiSide, state, difficulty, commit]);
+  }, [isAiTurn, aiSide, state, difficulty, commit, t]);
 
   const handleNode = (i: number) => {
     if (state.winner || thinking || isAiTurn || isRemoteTurn) return;
@@ -670,7 +700,16 @@ function Page() {
     setStatus(t.sSelectOwn);
   };
 
+  const cancelPendingAi = useCallback(() => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+    setThinking(false);
+  }, []);
+
   const newGame = useCallback(() => {
+    cancelPendingAi();
     setSessionCount((count) => count + 1);
     setHistory([createGame()]);
     setLog([]);
@@ -682,13 +721,14 @@ function Page() {
     setStatus(t.sNewGame);
     setTurnTimeLeft(timeoutSecs);
     setGameStarted(true);
-  }, [t, timeoutSecs]);
+  }, [cancelPendingAi, t, timeoutSecs]);
 
   const toggleChallenge = useCallback(() => {
     setChallengeMode((value) => !value);
   }, []);
 
   const goToMainMenu = useCallback(() => {
+    cancelPendingAi();
     setHistory([createGame()]);
     setLog([]);
     setLastMove(null);
@@ -699,9 +739,10 @@ function Page() {
     setStatus(t.sPlaceFirst);
     setTurnTimeLeft(timeoutSecs);
     setGameStarted(false);
-  }, [t, timeoutSecs]);
+  }, [cancelPendingAi, t, timeoutSecs]);
 
   const startMatch = (nextMode?: GameMode) => {
+    cancelPendingAi();
     if (nextMode) {
       setMode(nextMode);
       if (nextMode === "hotseat") {
@@ -728,7 +769,6 @@ function Page() {
     setViewingIndex(null);
     setTurnTimeLeft(timeoutSecs);
   };
-
   const undo = useCallback(() => {
     if (history.length < 2) return;
     const steps = aiSide && history.length > 2 ? 2 : 1;
