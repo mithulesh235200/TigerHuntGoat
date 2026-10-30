@@ -33,6 +33,8 @@ import {
   ChevronRight,
   ChevronDown,
   Film,
+  Play,
+  Pause,
   BarChart3,
   GraduationCap,
 } from "lucide-react";
@@ -63,7 +65,7 @@ type Props = {
   challengeMode?: boolean;
   sessionCount?: number;
   roomId?: string | null;
-  onlineRole?: "goat" | "tiger";
+  onlineRole?: "goat" | "tiger" | "spectator";
   copied?: boolean;
   onCopyInviteLink?: () => void;
   onMode: (m: GameMode) => void;
@@ -85,9 +87,12 @@ type Props = {
   replayTotal: number;
   replayActive: boolean;
   replayCopied: boolean;
+  replayAutoPlay: boolean;
+  onReplayPlayPause: () => void;
   onReplayStep: (delta: number) => void;
   onReplayExit: () => void;
   onCopyReplay: () => void;
+  isSpectating: boolean;
 };
 
 const modeMeta: { id: GameMode; icon: React.ReactNode }[] = [
@@ -416,7 +421,9 @@ export function Sidebar(p: Props) {
             ? state.winner === "tiger"
               ? t.tigerWins
               : t.goatWins
-            : `${state.turn === "goat" ? t.goatTurn : t.tigerTurn} · ${p.turnTimeLeft ?? 0}s · ${p.legalMovesCount ?? 0} ${t.legalOptions}`
+            : p.isSpectating
+              ? `${t.spectatorLabel} · ${state.turn === "goat" ? t.goatTurn : t.tigerTurn}`
+              : `${state.turn === "goat" ? t.goatTurn : t.tigerTurn} · ${p.turnTimeLeft ?? 0}s · ${p.legalMovesCount ?? 0} ${t.legalOptions}`
         }
         badge={
           <span className="rounded-full border border-white/10 bg-stone-950/70 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-stone-400">
@@ -878,6 +885,13 @@ export function Sidebar(p: Props) {
                 .replace("{i}", String(p.replayActive ? p.replayIndex : p.replayTotal))
                 .replace("{n}", String(p.replayTotal))}
             </span>
+            <button
+              onClick={p.onReplayPlayPause}
+              className={`flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-stone-200 transition-all hover:bg-stone-800`}
+              aria-label={p.replayAutoPlay ? t.replayPause : t.replayPlay}
+            >
+              {p.replayAutoPlay ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+            </button>
             {p.replayActive ? (
               <button
                 onClick={p.onReplayExit}
