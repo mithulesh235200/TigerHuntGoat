@@ -41,12 +41,13 @@ import {
   type Move,
   type Side,
 } from "@/lib/game/engine";
+import { PUZZLES, type Puzzle, getPuzzleById } from "@/lib/game/puzzles";
 import { playSound } from "@/lib/game/sound";
 import { applyTheme, getSavedTheme, isThemeId, type ThemeId } from "@/lib/theme";
 import { createRoomChannel, type UnifiedRealtimeChannel } from "@/lib/online";
 import { describeMove } from "@/lib/describe";
 import { decodeMoves, encodeHistory, movesFromHistory } from "@/lib/replay";
-import { buzz, shareOrCopy } from "@/lib/device";
+import { buzz, shareOrCopy, prefersReducedMotion } from "@/lib/device";
 import { getSavedLang, useLang, type Lang } from "@/lib/i18n";
 import { loadRecords, saveRecords, type GameRecord } from "@/lib/stats";
 
@@ -104,7 +105,9 @@ function Page() {
     currentStreak: 0,
   });
   const [roomId, setRoomId] = useState<string | null>(null);
-  const [onlineRole, setOnlineRole] = useState<"goat" | "tiger">("goat");
+  const [joinRoomCode, setJoinRoomCode] = useState("");
+  const [onlineRole, setOnlineRole] = useState<"goat" | "tiger" | "spectator">("goat");
+  const [isSpectating, setIsSpectating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [matchLoaded, setMatchLoaded] = useState(false);
   const [theme, setTheme] = useState<ThemeId>("ember");
@@ -116,7 +119,34 @@ function Page() {
   );
   const [viewingIndex, setViewingIndex] = useState<number | null>(null);
   const [replayCopied, setReplayCopied] = useState(false);
+  const [replayAutoPlay, setReplayAutoPlay] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [srAnnouncement, setSrAnnouncement] = useState("");
+
+  // Puzzle / Challenge Mode state
+  const [puzzleMode, setPuzzleMode] = useState(false);
+  const [currentPuzzle, setCurrentPuzzle] = useState<Puzzle | null>(null);
+  const [puzzleSolved, setPuzzleSolved] = useState(false);
+  const [puzzleMoves, setPuzzleMoves] = useState(0);
+  const [puzzleSolvedHistory, setPuzzleSolvedHistory] = useState<Set<string>>(() => {
+    try {
+      const saved = window.localStorage.getItem("aadu-puli-puzzles-solved");
+      if (saved) return new Set(JSON.parse(saved));
+    } catch {
+      // ignore
+    }
+    return new Set();
+  });
+
+  // Tracks the piece currently travelling from one node to the next (move or capture),
+  // plus its travel progress (0 -> 1), so the board can render it in transit.
+  const [animatingMove, setAnimatingMove] = useState<Move | null>(null);
+  const [animProgress, setAnimProgress] = useState(0);
+  const [undoPendingMove, setUndoPendingMove] = useState<Move | null>(null);
+  const animFrameRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
+  const replayIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const ANIM_MS = 420;
 
   const changeTheme = useCallback((th: ThemeId) => {
     setTheme(th);
@@ -166,6 +196,21 @@ function Page() {
           ? t.sJoinedOnline.replace("{room}", currentRoom)
           : t.sJoinedLocal.replace("{room}", currentRoom),
       );
+      setMatchLoaded(true);
+      return;
+    }
+
+    // Spectator mode: watch an online match without playing
+    if (urlMode === "spectate" && urlRoom) {
+      setMode("online");
+      setOnlineRole("spectator");
+      setIsSpectating(true);
+      setRoomId(urlRoom);
+      setHistory([createGame()]);
+      setLog([]);
+      setLastMove(null);
+      setGameStarted(true);
+      setStatus(t.sSpectating.replace("{room}", urlRoom));
       setMatchLoaded(true);
       return;
     }
@@ -273,7 +318,9 @@ function Page() {
     onlineChannel.current = channel;
     channel
       .on("broadcast", { event: "state" }, ({ payload }) => {
-        if (payload.senderRole === onlineRole || !payload.history?.length) return;
+        // Spectators and players both receive state from opponents.
+        if (payload.senderRole === onlineRole && onlineRole !== "spectator") return;
+        if (!payload.history?.length) return;
         receivedOnlineState.current = true;
         const incoming = payload.history as GameState[];
         const wasLive = historyRef.current.length > 1 && incoming.length === 1;
@@ -287,6 +334,7 @@ function Page() {
         setStatus(wasLive ? t.sRematch : t.sOpponentMoved);
       })
       .on("broadcast", { event: "request-state" }, () => {
+        // Only goat player responds to state requests; spectators never do.
         if (onlineRole !== "goat") return;
         void channel.send({
           type: "broadcast",
@@ -301,6 +349,10 @@ function Page() {
       })
       .subscribe((status) => {
         if (status !== "SUBSCRIBED") return;
+        if (onlineRole === "spectator") {
+          // Spectators just listen — they don't push state.
+          return;
+        }
         if (onlineRole === "tiger") {
           void channel.send({ type: "broadcast", event: "request-state", payload: {} });
         } else {
@@ -441,7 +493,7 @@ function Page() {
       ? "goat"
       : mode === "tiger-vs-ai"
         ? "tiger"
-        : mode === "online"
+        : mode === "online" && onlineRole !== "spectator"
           ? onlineRole
           : null;
 
@@ -592,11 +644,15 @@ function Page() {
     (next: GameState, move: Move, side: Side) => {
       setHistory((h) => [...h, next]);
       setLog((l) => [...l, describeMove(move, side, t)]);
+      setSrAnnouncement(describeMove(move, side, t));
       setLastMove(move);
       setHint(null);
       setSelected(null);
       setTargets([]);
       setViewingIndex(null);
+      // Begin the in-transit animation for moves and captures (not placements).
+      setAnimatingMove(move.kind === "place" ? null : move);
+      setAnimProgress(0);
       playSound(
         move.kind === "capture" ? "capture" : move.kind === "place" ? "place" : "move",
         muted,
@@ -610,9 +666,60 @@ function Page() {
       } else {
         setStatus(next.turn === "goat" ? t.sGoatsMove : t.sTigersMove);
       }
+      // Puzzle completion check
+      if (puzzleMode && currentPuzzle && currentPuzzle.isSolved(next)) {
+        setPuzzleSolved(true);
+        setPuzzleMoves((m) => m + 1);
+        const nextSolved = new Set(puzzleSolvedHistory);
+        nextSolved.add(currentPuzzle.id);
+        setPuzzleSolvedHistory(nextSolved);
+        try {
+          window.localStorage.setItem(
+            "aadu-puli-puzzles-solved",
+            JSON.stringify([...nextSolved]),
+          );
+        } catch {
+          // ignore
+        }
+        setStatus(t.puzzleSolved);
+      } else if (puzzleMode) {
+        setPuzzleMoves((m) => m + 1);
+      }
     },
-    [recordWin, muted, t],
+    [recordWin, muted, t, puzzleMode, currentPuzzle, puzzleSolvedHistory],
   );
+
+  // Drive the in-transit travel animation (0 -> 1) whenever a move/capture commits.
+  // Respects prefers-reduced-motion, in which case the piece simply lands.
+  useEffect(() => {
+    if (!animatingMove) return;
+    if (prefersReducedMotion()) {
+      setAnimProgress(0);
+      setAnimatingMove(null);
+      return;
+    }
+    const start = performance.now();
+    let cancelled = false;
+    function loop(now: number) {
+      if (cancelled) return;
+      const p = Math.min(1, (now - start) / ANIM_MS);
+      setAnimProgress(p);
+      if (p >= 1) {
+        setAnimProgress(0);
+        setAnimatingMove(null);
+      } else {
+        animFrameRef.current = requestAnimationFrame(loop);
+      }
+    }
+    animFrameRef.current = requestAnimationFrame(loop);
+    return () => {
+      cancelled = true;
+      if (animFrameRef.current != null) {
+        cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = null;
+      }
+    };
+  }, [animatingMove]);
 
   // AI turn execution
   useEffect(() => {
@@ -644,6 +751,36 @@ function Page() {
       if (timer.current) clearTimeout(timer.current);
     };
   }, [isAiTurn, aiSide, state, difficulty, commit, t]);
+
+  // Drag-to-move: start dragging a piece (sets selection + targets for that node).
+  const handleDragStart = useCallback(
+    (from: number) => {
+      if (state.winner || thinking || isAiTurn || isRemoteTurn) return;
+      setSelected(from);
+      setTargets(movesFrom(state, from));
+      if (movesFrom(state, from).length === 0) {
+        playSound("invalid", muted);
+        buzz(25);
+        setStatus(t.sNoDest);
+      }
+    },
+    [state, thinking, isAiTurn, isRemoteTurn, muted, t],
+  );
+
+  // Drag-to-move: release over a destination node to commit the move.
+  const handleDragEnd = useCallback(
+    (to: number | null) => {
+      setSelected(null);
+      setTargets([]);
+      if (to == null) return;
+      if (state.winner || thinking || isAiTurn || isRemoteTurn) return;
+      const chosen = targets.find((m) => m.to === to);
+      if (!chosen) return;
+      // commit() already calls playSound, buzz, and setStatus internally.
+      commit(applyMove(state, chosen), chosen, state.turn);
+    },
+    [state, targets, thinking, isAiTurn, isRemoteTurn, commit],
+  );
 
   const handleNode = (i: number) => {
     if (state.winner || thinking || isAiTurn || isRemoteTurn) return;
@@ -721,6 +858,7 @@ function Page() {
     setStatus(t.sNewGame);
     setTurnTimeLeft(timeoutSecs);
     setGameStarted(true);
+    setUndoPendingMove(null);
   }, [cancelPendingAi, t, timeoutSecs]);
 
   const toggleChallenge = useCallback(() => {
@@ -739,6 +877,7 @@ function Page() {
     setStatus(t.sPlaceFirst);
     setTurnTimeLeft(timeoutSecs);
     setGameStarted(false);
+    setUndoPendingMove(null);
   }, [cancelPendingAi, t, timeoutSecs]);
 
   const startMatch = (nextMode?: GameMode) => {
@@ -769,8 +908,111 @@ function Page() {
     setViewingIndex(null);
     setTurnTimeLeft(timeoutSecs);
   };
+
+  const joinRoom = useCallback(() => {
+    const code = joinRoomCode.trim();
+    if (!code) return;
+    cancelPendingAi();
+    setMode("online");
+    setRoomId(code);
+    setOnlineRole("goat");
+    setGameStarted(true);
+    setHistory([createGame()]);
+    setLog([]);
+    setLastMove(null);
+    setHint(null);
+    setSelected(null);
+    setTargets([]);
+    setViewingIndex(null);
+    setStatus(t.sJoinedOnline.replace("{room}", code));
+    setTurnTimeLeft(timeoutSecs);
+  }, [joinRoomCode, cancelPendingAi, t, timeoutSecs]);
+
+  const spectateRoom = useCallback(() => {
+    const code = joinRoomCode.trim();
+    if (!code) return;
+    cancelPendingAi();
+    setMode("online");
+    setOnlineRole("spectator");
+    setIsSpectating(true);
+    setRoomId(code);
+    setGameStarted(true);
+    setHistory([createGame()]);
+    setLog([]);
+    setLastMove(null);
+    setHint(null);
+    setSelected(null);
+    setTargets([]);
+    setViewingIndex(null);
+    setStatus(t.sSpectating.replace("{room}", code));
+    setTurnTimeLeft(timeoutSecs);
+  }, [joinRoomCode, cancelPendingAi, t, timeoutSecs]);
+
+  const startPuzzle = useCallback(
+    (puzzleId: string) => {
+      const puzzle = getPuzzleById(puzzleId);
+      if (!puzzle) return;
+      cancelPendingAi();
+      setPuzzleMode(true);
+      setCurrentPuzzle(puzzle);
+      setPuzzleSolved(puzzleSolvedHistory.has(puzzleId));
+      setPuzzleMoves(0);
+      setMode("goat-vs-ai"); // use AI mode for puzzle, but we control the flow
+      setDifficulty("easy");
+      setGameStarted(true);
+      setHistory([puzzle.initial()]);
+      setLog([]);
+      setLastMove(null);
+      setHint(null);
+      setSelected(null);
+      setTargets([]);
+      setViewingIndex(null);
+      setTurnTimeLeft(timeoutSecs);
+      setStatus(puzzle.objectiveText);
+    },
+    [cancelPendingAi, puzzleSolvedHistory, timeoutSecs],
+  );
+
+  const exitPuzzle = useCallback(() => {
+    setPuzzleMode(false);
+    setCurrentPuzzle(null);
+    setPuzzleSolved(false);
+    setPuzzleMoves(0);
+    setMode("goat-vs-ai");
+    setGameStarted(false);
+    setStatus(t.puzzleExit);
+  }, [t]);
+
   const undo = useCallback(() => {
     if (history.length < 2) return;
+    const lastMove = histMoves[history.length - 2];
+    if (!lastMove) return;
+
+    // Placements undo instantly — no travel to animate.
+    if (lastMove.kind === "place") {
+      const steps = aiSide && history.length > 2 ? 2 : 1;
+      setHistory((h) => h.slice(0, Math.max(1, h.length - steps)));
+      setLog((l) => l.slice(0, Math.max(0, l.length - steps)));
+      setLastMove(null);
+      setHint(null);
+      setSelected(null);
+      setTargets([]);
+      setViewingIndex(null);
+      setStatus(t.sUndone);
+      return;
+    }
+
+    // Moves/captures: animate the piece travelling back to its origin,
+    // then pop the history once the animation finishes.
+    setUndoPendingMove(lastMove);
+    setAnimatingMove({ kind: "move", from: lastMove.to, to: lastMove.from });
+    setAnimProgress(0);
+  }, [history.length, histMoves, aiSide, t]);
+
+  // Apply the undo after the reverse travel animation completes.
+  useEffect(() => {
+    if (animatingMove !== null || !undoPendingMove) return;
+
     const steps = aiSide && history.length > 2 ? 2 : 1;
     setHistory((h) => h.slice(0, Math.max(1, h.length - steps)));
     setLog((l) => l.slice(0, Math.max(0, l.length - steps)));
@@ -780,7 +1022,8 @@ function Page() {
     setTargets([]);
     setViewingIndex(null);
     setStatus(t.sUndone);
-  }, [aiSide, history.length, t]);
+    setUndoPendingMove(null);
+  }, [animatingMove, undoPendingMove, aiSide, history.length, t]);
 
   const showHint = useCallback(() => {
     if (state.winner || thinking || isAiTurn || isRemoteTurn) return;
@@ -807,8 +1050,48 @@ function Page() {
     setHint(null);
   }, []);
 
+  // When the replay index changes, animate the piece from the previous state
+  // to the current state using the same travel animation as live moves.
+  useEffect(() => {
+    if (viewingIndex == null) {
+      setAnimatingMove(null);
+      setAnimProgress(0);
+      return;
+    }
+    const move = boardLastMove;
+    if (move) {
+      setAnimatingMove(move);
+      setAnimProgress(0);
+    }
+  }, [viewingIndex, boardLastMove]);
+
+  // Auto-advance replay when autoplay is enabled.
+  useEffect(() => {
+    if (!replayAutoPlay || viewingIndex == null) return;
+    const total = historyRef.current.length;
+    if (viewingIndex >= total - 1) {
+      setReplayAutoPlay(false);
+      return;
+    }
+    replayIntervalRef.current = setInterval(() => {
+      setViewingIndex((v) => {
+        const cur = v ?? total - 1;
+        const next = Math.min(total - 1, cur + 1);
+        return next === total - 1 ? null : next;
+      });
+    }, 1200);
+    return () => {
+      if (replayIntervalRef.current) clearInterval(replayIntervalRef.current);
+    };
+  }, [replayAutoPlay, viewingIndex]);
+
   const exitReplay = useCallback(() => {
     setViewingIndex(null);
+    setReplayAutoPlay(false);
+  }, []);
+
+  const handleReplayPlayPause = useCallback(() => {
+    setReplayAutoPlay((prev) => !prev);
   }, []);
 
   const handleCopyReplay = useCallback(async () => {
@@ -875,6 +1158,10 @@ function Page() {
 
   return (
     <main className="min-h-screen bg-background font-sans text-stone-100 antialiased selection:bg-[var(--a-chip)] pb-16">
+      {/* Screen-reader live region for move announcements. */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {srAnnouncement}
+      </div>
       <PwaBadges />
       {/* Top Glassmorphic Navigation Header Bar */}
       <header className="sticky top-0 z-30 border-b border-white/10 bg-stone-950/80 px-4 py-3 backdrop-blur-xl lg:px-10">
@@ -1157,6 +1444,39 @@ function Page() {
               </button>
             </div>
 
+            {/* Join Room by Code */}
+            <div className="mt-6 rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-4">
+              <div className="flex items-center gap-2 mb-3 text-xs font-black uppercase tracking-[0.2em] text-cyan-400">
+                <Share2 className="h-3.5 w-3.5" />
+                {t.joinRoom}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 items-center">
+                <input
+                  type="text"
+                  value={joinRoomCode}
+                  onChange={(e) => setJoinRoomCode(e.target.value.toUpperCase())}
+                  placeholder={t.joinRoomPlaceholder}
+                  maxLength={8}
+                  className="flex-1 min-w-0 rounded-xl border border-white/10 bg-stone-900/80 px-3 py-2 text-xs font-bold text-stone-100 placeholder-stone-500 focus:ring-2 focus:ring-cyan-500/50 outline-none transition-all uppercase tracking-wider"
+                />
+                <button
+                  onClick={joinRoom}
+                  disabled={joinRoomCode.trim().length === 0}
+                  className="rounded-xl border border-white/10 bg-stone-900/80 px-4 py-2 text-xs font-bold text-stone-100 uppercase tracking-wider transition-all disabled:opacity-30 disabled:pointer-events-none hover:bg-stone-800 active:scale-95"
+                >
+                  {t.joinRoomBtn}
+                </button>
+                <button
+                  onClick={spectateRoom}
+                  disabled={joinRoomCode.trim().length === 0}
+                  className="rounded-xl border border-white/20 bg-stone-900/60 px-4 py-2 text-xs font-bold text-cyan-400 uppercase tracking-wider transition-all disabled:opacity-30 disabled:pointer-events-none hover:bg-stone-800 hover:border-cyan-500/50 active:scale-95"
+                >
+                  {t.spectateBtn}
+                </button>
+              </div>
+              <p className="mt-2 text-[10px] text-stone-500">{t.joinRoomDesc}</p>
+            </div>
+
             <button
               onClick={() => startMatch(mode)}
               className="t-btn-primary mt-8 inline-flex items-center justify-center rounded-2xl px-8 py-3.5 text-xs font-black uppercase tracking-[0.22em] transition-transform hover:scale-[1.03] active:scale-95"
@@ -1242,8 +1562,8 @@ function Page() {
       )}
 
       {/* Main Game Section */}
-      <div className="mx-auto max-w-7xl px-4 pt-6 lg:px-8">
-        <div className="flex flex-col items-center gap-8 lg:flex-row lg:items-start lg:justify-between">
+      <div className="mx-auto max-w-7xl px-4 pt-4 sm:pt-6 lg:px-8">
+        <div className="flex flex-col items-center gap-4 sm:gap-8 lg:flex-row lg:items-start lg:justify-between">
           <div className="rise flex w-full flex-1 flex-col items-center justify-center">
             {/* Tactical Hint — on top of the board */}
             <div className="glass-card t-panel mb-3 flex w-full max-w-[620px] items-center gap-3 rounded-2xl border p-3 shadow-xl">
@@ -1289,7 +1609,12 @@ function Page() {
               }
               turnTimeLeft={turnTimeLeft}
               turnTimeLimit={timeoutSecs}
+              animatingMove={animatingMove}
+              animProgress={animProgress}
               onNodeClick={handleNode}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              isSpectating={isSpectating}
             />
           </div>
 
@@ -1321,6 +1646,8 @@ function Page() {
             replayTotal={viewingTotal}
             replayActive={viewingIndex != null}
             replayCopied={replayCopied}
+            replayAutoPlay={replayAutoPlay}
+            onReplayPlayPause={handleReplayPlayPause}
             onReplayStep={stepReplay}
             onReplayExit={exitReplay}
             onCopyReplay={handleCopyReplay}
@@ -1335,6 +1662,7 @@ function Page() {
             onReset={newGame}
             onUndo={undo}
             onTour={() => setShowTutorial(true)}
+            isSpectating={isSpectating}
           />
         </div>
       </div>
