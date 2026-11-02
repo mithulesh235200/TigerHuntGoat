@@ -70,7 +70,6 @@ export function Tutorial({ open, onClose, onPractice }: Props) {
               turnTimeLeft={TURN_SECONDS}
               turnTimeLimit={TURN_SECONDS}
               animatingMove={null}
-              animProgress={0}
               onNodeClick={() => {}}
             />
           </div>

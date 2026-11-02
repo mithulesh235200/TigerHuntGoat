@@ -32,7 +32,8 @@ import {
   type TimeoutSecs,
 } from "@/components/game/Sidebar";
 import { LABELS } from "@/lib/game/board";
-import { chooseMove, type Difficulty } from "@/lib/game/ai";
+import { type Difficulty } from "@/lib/game/ai";
+import { chooseMoveAsync } from "@/lib/game/aiClient";
 import {
   applyMove,
   createGame,
@@ -82,6 +83,9 @@ const SETTINGS_KEY = "aadu-puli-aatam-settings";
 const MATCH_KEY = "aadu-puli-aatam-active-match";
 const TOUR_KEY = "aadu-puli-aatam-tour-seen";
 
+// Minimum pause before the AI replies, so it doesn't feel instantaneous.
+const MIN_THINK_MS = 320;
+
 function Page() {
   const [history, setHistory] = useState<GameState[]>([createGame()]);
   const [log, setLog] = useState<string[]>([]);
@@ -94,6 +98,7 @@ function Page() {
   const [hint, setHint] = useState<Move | null>(null);
   const [status, setStatus] = useState("Place a goat on any empty point to begin.");
   const [thinking, setThinking] = useState(false);
+  const [hintPending, setHintPending] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [turnTimeLeft, setTurnTimeLeft] = useState(30);
@@ -148,15 +153,38 @@ function Page() {
     return new Set();
   });
 
-  // Tracks the piece currently travelling from one node to the next (move or capture),
-  // plus its travel progress (0 -> 1), so the board can render it in transit.
+  // Tracks the piece currently travelling from one node to the next (move or capture).
+  // GameBoard owns the 0→1 progress itself; the route only tracks WHICH move is in
+  // flight (and clears it once the animation duration has elapsed).
   const [animatingMove, setAnimatingMove] = useState<Move | null>(null);
-  const [animProgress, setAnimProgress] = useState(0);
   const [undoPendingMove, setUndoPendingMove] = useState<Move | null>(null);
-  const animFrameRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
+  const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Wall-clock time at which the in-flight travel animation will have landed.
+  const animUntilRef = useRef(0);
   const replayIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const ANIM_MS = 420;
+
+  // Start (or restart) the in-transit travel animation for a move/capture and
+  // clear it once it has had time to play. GameBoard renders the interpolation
+  // itself; the route only needs to know a travel is in flight (undo/replay
+  // gate on it), so this never runs a per-frame loop over the whole page.
+  const startTravel = useCallback((move: Move | null) => {
+    if (animTimerRef.current) clearTimeout(animTimerRef.current);
+    animTimerRef.current = null;
+    if (!move || move.kind === "place" || prefersReducedMotion()) {
+      animUntilRef.current = 0;
+      setAnimatingMove(null);
+      return;
+    }
+    setAnimatingMove(move);
+    animUntilRef.current = Date.now() + ANIM_MS;
+    animTimerRef.current = setTimeout(() => {
+      animTimerRef.current = null;
+      animUntilRef.current = 0;
+      setAnimatingMove(null);
+    }, ANIM_MS);
+  }, []);
 
   const changeTheme = useCallback((th: ThemeId) => {
     setTheme(th);
@@ -557,20 +585,33 @@ function Page() {
             ? t.coachPressure
             : t.coachDefault;
 
-  const suggestedMove = useMemo(
-    () => (!state.winner && !isAiTurn ? chooseMove(state, state.turn, difficulty) : null),
-    // state is derived from history; history.length + turn + placement + captures cover it.
+  // Tactical suggestion for the coach card. This used to be a useMemo running a
+  // full minimax search synchronously during render — every move froze the UI
+  // for as long as the search took. It's now computed off the render path.
+  const [suggestedMove, setSuggestedMove] = useState<Move | null>(null);
+  useEffect(() => {
+    if (state.winner || isAiTurn) {
+      setSuggestedMove(null);
+      return;
+    }
+    let cancelled = false;
+    chooseMoveAsync(state, state.turn, difficulty).then((move) => {
+      if (!cancelled) setSuggestedMove(move);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // `state` is derived from history; these fields cover every change to it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      history.length,
-      state.turn,
-      state.goatsToPlace,
-      state.goatsCaptured,
-      state.winner,
-      isAiTurn,
-      difficulty,
-    ],
-  );
+  }, [
+    history.length,
+    state.turn,
+    state.goatsToPlace,
+    state.goatsCaptured,
+    state.winner,
+    isAiTurn,
+    difficulty,
+  ]);
   const suggestedMoveText = suggestedMove ? describeMove(suggestedMove, state.turn, t) : "—";
   const summary = {
     winnerLabel: state.winner === "tiger" ? t.tigerWins : t.goatWins,
@@ -692,8 +733,7 @@ function Page() {
       setTargets([]);
       setViewingIndex(null);
       // Begin the in-transit animation for moves and captures (not placements).
-      setAnimatingMove(move.kind === "place" ? null : move);
-      setAnimProgress(0);
+      startTravel(move.kind === "place" ? null : move);
       playSound(
         move.kind === "capture" ? "capture" : move.kind === "place" ? "place" : "move",
         muted,
@@ -739,69 +779,53 @@ function Page() {
         }
       }
     },
-    [recordWin, muted, t, puzzleMode, currentPuzzle, puzzleSolvedHistory, puzzleMoves],
+    [recordWin, muted, t, puzzleMode, currentPuzzle, puzzleSolvedHistory, puzzleMoves, startTravel],
   );
 
-  // Drive the in-transit travel animation (0 -> 1) whenever a move/capture commits.
-  // Respects prefers-reduced-motion, in which case the piece simply lands.
-  useEffect(() => {
-    if (!animatingMove) return;
-    if (prefersReducedMotion()) {
-      setAnimProgress(0);
-      setAnimatingMove(null);
-      return;
-    }
-    const start = performance.now();
-    let cancelled = false;
-    function loop(now: number) {
-      if (cancelled) return;
-      const p = Math.min(1, (now - start) / ANIM_MS);
-      setAnimProgress(p);
-      if (p >= 1) {
-        setAnimProgress(0);
-        setAnimatingMove(null);
-      } else {
-        animFrameRef.current = requestAnimationFrame(loop);
-      }
-    }
-    animFrameRef.current = requestAnimationFrame(loop);
-    return () => {
-      cancelled = true;
-      if (animFrameRef.current != null) {
-        cancelAnimationFrame(animFrameRef.current);
-        animFrameRef.current = null;
-      }
-    };
-  }, [animatingMove]);
-
-  // AI turn execution
+  // AI turn execution: kick the search off immediately in a worker, then play
+  // the reply once BOTH the minimum "thinking" beat and the board's travel
+  // animation have elapsed. Doing the search synchronously here (after a fixed
+  // 350ms delay) blocked the main thread and stalled the animation.
   useEffect(() => {
     if (!isAiTurn || !aiSide) return;
     let cancelled = false;
+    let replyTimer: ReturnType<typeof setTimeout> | null = null;
     setThinking(true);
-    timer.current = setTimeout(() => {
-      try {
-        const move = chooseMove(state, aiSide, difficulty);
+    const startedAt = performance.now();
+    chooseMoveAsync(state, aiSide, difficulty)
+      .then((move) => {
         if (cancelled) return;
-        setThinking(false);
-        if (!move) {
-          // No legal move and no winner — the game state is terminal/invalid.
-          // Fail safe instead of leaving the board stuck on the AI turn.
-          if (!state.winner) setStatus(t.sNoLegal);
-          return;
-        }
-        commit(applyMove(state, move), move, aiSide);
-      } catch (error) {
+        const apply = () => {
+          if (cancelled) return;
+          setThinking(false);
+          if (!move) {
+            // No legal move and no winner — the game state is terminal/invalid.
+            // Fail safe instead of leaving the board stuck on the AI turn.
+            if (!state.winner) setStatus(t.sNoLegal);
+            return;
+          }
+          commit(applyMove(state, move), move, aiSide);
+        };
+        // Hold the reply until the player's piece has landed and a short
+        // thinking beat has passed, so moves don't feel instant or choppy.
+        const wait = Math.max(
+          MIN_THINK_MS - (performance.now() - startedAt),
+          animUntilRef.current - Date.now() + 80,
+          0,
+        );
+        if (wait > 0) replyTimer = setTimeout(apply, wait);
+        else apply();
+      })
+      .catch((error) => {
         console.error("AI move failed", error);
         if (!cancelled) {
           setThinking(false);
           setStatus(t.sNoLegal);
         }
-      }
-    }, 350);
+      });
     return () => {
       cancelled = true;
-      if (timer.current) clearTimeout(timer.current);
+      if (replyTimer) clearTimeout(replyTimer);
     };
   }, [isAiTurn, aiSide, state, difficulty, commit, t]);
 
@@ -934,8 +958,7 @@ function Page() {
     setTargets([]);
     setViewingIndex(null);
     setUndoPendingMove(null);
-    setAnimatingMove(null);
-    setAnimProgress(0);
+    startTravel(null);
     setTurnTimeLeft(timeoutSecs);
     setGameStarted(true);
     if (puzzleMode) {
@@ -945,7 +968,15 @@ function Page() {
     } else {
       setStatus(t.sPlaceFirst);
     }
-  }, [cancelPendingAi, timeoutSecs, puzzleMode, currentPuzzle, puzzleSolvedHistory, t]);
+  }, [
+    cancelPendingAi,
+    timeoutSecs,
+    puzzleMode,
+    currentPuzzle,
+    puzzleSolvedHistory,
+    t,
+    startTravel,
+  ]);
 
   const toggleChallenge = useCallback(() => {
     setChallengeMode((value) => !value);
@@ -1116,9 +1147,8 @@ function Page() {
     // Moves/captures: animate the piece travelling back to its origin,
     // then pop the history once the animation finishes.
     setUndoPendingMove(lastMove);
-    setAnimatingMove({ kind: "move", from: lastMove.to, to: lastMove.from });
-    setAnimProgress(0);
-  }, [history.length, histMoves, aiSide, t]);
+    startTravel({ kind: "move", from: lastMove.to, to: lastMove.from });
+  }, [history.length, histMoves, aiSide, t, startTravel]);
 
   // Apply the undo after the reverse travel animation completes.
   useEffect(() => {
@@ -1137,17 +1167,22 @@ function Page() {
   }, [animatingMove, undoPendingMove, aiSide, history.length, t]);
 
   const showHint = useCallback(() => {
-    if (state.winner || thinking || isAiTurn || isRemoteTurn) return;
-    const suggested = chooseMove(state, state.turn, difficulty);
-    if (!suggested) {
-      setStatus(t.sNoLegal);
-      return;
-    }
-    setHint(suggested);
-    setSelected(null);
-    setTargets([]);
-    setStatus(t.sHint.replace("{move}", describeMove(suggested, state.turn, t)));
-  }, [difficulty, isAiTurn, isRemoteTurn, state, thinking, t]);
+    if (state.winner || thinking || hintPending || isAiTurn || isRemoteTurn) return;
+    setHintPending(true);
+    chooseMoveAsync(state, state.turn, difficulty)
+      .then((suggested) => {
+        setHintPending(false);
+        if (!suggested) {
+          setStatus(t.sNoLegal);
+          return;
+        }
+        setHint(suggested);
+        setSelected(null);
+        setTargets([]);
+        setStatus(t.sHint.replace("{move}", describeMove(suggested, state.turn, t)));
+      })
+      .catch(() => setHintPending(false));
+  }, [difficulty, isAiTurn, isRemoteTurn, state, thinking, hintPending, t]);
 
   const stepReplay = useCallback((delta: number) => {
     setViewingIndex((v) => {
@@ -1167,17 +1202,15 @@ function Page() {
   // animation `commit()` just started and pieces would teleport instead of glide.
   useEffect(() => {
     if (viewingIndex != null) return;
-    setAnimatingMove(null);
-    setAnimProgress(0);
-  }, [viewingIndex]);
+    startTravel(null);
+  }, [viewingIndex, startTravel]);
 
   // When the replay index changes, animate the piece from the previous state
   // to the current state using the same travel animation as live moves.
   useEffect(() => {
     if (viewingIndex == null || !boardLastMove) return;
-    setAnimatingMove(boardLastMove);
-    setAnimProgress(0);
-  }, [viewingIndex, boardLastMove]);
+    startTravel(boardLastMove);
+  }, [viewingIndex, boardLastMove, startTravel]);
 
   // Auto-advance replay when autoplay is enabled.
   useEffect(() => {
@@ -1733,7 +1766,7 @@ function Page() {
                 <div className="mt-2.5 flex flex-wrap gap-2">
                   <button
                     onClick={showHint}
-                    disabled={!!state.winner || thinking || viewingIndex != null}
+                    disabled={!!state.winner || thinking || hintPending || viewingIndex != null}
                     className="t-btn-primary rounded-xl px-3.5 py-2 text-[11px] font-black uppercase tracking-wider transition-all disabled:opacity-30 hover:brightness-110 active:scale-95"
                   >
                     {t.hintBtn}
@@ -1785,7 +1818,9 @@ function Page() {
                 </div>
                 <button
                   onClick={showHint}
-                  disabled={!!state.winner || thinking || isAiTurn || viewingIndex != null}
+                  disabled={
+                    !!state.winner || thinking || hintPending || isAiTurn || viewingIndex != null
+                  }
                   className="t-btn-primary shrink-0 rounded-xl px-4 py-2 text-[11px] font-black uppercase tracking-wider transition-all disabled:opacity-30 hover:scale-105 hover:brightness-110 active:scale-95"
                 >
                   {t.hintBtn}
@@ -1811,7 +1846,6 @@ function Page() {
               turnTimeLeft={turnTimeLeft}
               turnTimeLimit={timeoutSecs}
               animatingMove={animatingMove}
-              animProgress={animProgress}
               onNodeClick={handleNode}
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}

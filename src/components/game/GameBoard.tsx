@@ -24,7 +24,6 @@ type Props = {
   turnTimeLeft?: number;
   turnTimeLimit?: number;
   animatingMove: Move | null;
-  animProgress: number;
   onNodeClick: (i: number) => void;
   onDragStart?: (from: number) => void;
   onDragEnd?: (to: number | null) => void;
@@ -47,7 +46,6 @@ export function GameBoard({
   turnTimeLeft,
   turnTimeLimit,
   animatingMove,
-  animProgress,
   onNodeClick,
   onDragStart,
   onDragEnd,
@@ -155,7 +153,36 @@ export function GameBoard({
   }, [dragFrom, screenToSvg, targets, onDragEnd]);
 
   // Which piece is currently travelling (move or capture), and where it's headed.
-  const isAnimating = animatingMove != null && animProgress > 0 && animProgress < 1;
+  // The 0→1 progress lives HERE (not in the page) so the 60fps loop only
+  // re-renders the board — driving it from the route re-rendered the whole app
+  // (sidebar, charts, panels) on every frame and made movement visibly janky.
+  const [animProgress, setAnimProgress] = useState(0);
+  useEffect(() => {
+    if (!animatingMove) {
+      setAnimProgress(0);
+      return;
+    }
+    if (prefersReducedMotion()) {
+      setAnimProgress(1);
+      return;
+    }
+    let cancelled = false;
+    const start = performance.now();
+    setAnimProgress(0);
+    const loop = (now: number) => {
+      if (cancelled) return;
+      const p = Math.min(1, (now - start) / ANIM_MS);
+      setAnimProgress(p);
+      if (p < 1) requestAnimationFrame(loop);
+    };
+    const raf = requestAnimationFrame(loop);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [animatingMove]);
+
+  const isAnimating = animatingMove != null && animProgress < 1;
   const animDest = isAnimating ? animatingMove.to : null;
   const animSource = isAnimating
     ? animatingMove.kind !== "place"
