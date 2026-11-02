@@ -133,12 +133,14 @@ const en = {
   puzzleDifficulty: "Difficulty",
   puzzleBack: "Back to puzzles",
   puzzleNext: "Next puzzle",
+  puzzleFailed: "Out of moves — reset the board and try again.",
   copyOnline: "Copy Online Invite Link",
   copyLocal: "Copy Room Link",
   copiedMsg: "Invite Link Copied!",
   history: "Move Feed History",
   noMoves: "No moves recorded yet. Place the first goat!",
   newGame: "New Game",
+  resetBoard: "Reset Board",
   hintBtn: "Tactical Hint",
   undoBtn: "Undo",
   soundOn: "Sound On",
@@ -388,6 +390,7 @@ const ta: Strings = {
   history: "நகர்வு வரலாறு",
   noMoves: "இன்னும் நகர்வுகள் இல்லை. முதல் ஆட்டை வையுங்கள்!",
   newGame: "புதிய ஆட்டம்",
+  resetBoard: "பலகையை மீட்டமை",
   hintBtn: "தந்திர குறிப்பு",
   undoBtn: "திரும்பப்பெறு",
   soundOn: "ஒலி இயக்கம்",
@@ -522,6 +525,7 @@ const ta: Strings = {
   puzzleDifficulty: "சிரமம்",
   puzzleBack: "பயிற்சிகளுக்கு திரும்பு",
   puzzleNext: "அடுத்த பயிற்சி",
+  puzzleFailed: "நகர்வுகள் முடிந்தன — மீண்டும் முயற்சிக்கவும்.",
 };
 
 const STRINGS: Record<Lang, Strings> = { en, ta };

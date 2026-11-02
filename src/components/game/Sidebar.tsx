@@ -1,4 +1,5 @@
 import { CAPTURES_TO_WIN, TOTAL_GOATS, type GameState } from "@/lib/game/engine";
+import type { Puzzle } from "@/lib/game/puzzles";
 import { TigerFaceMark } from "@/components/game/TigerFace";
 import { GoatFaceMark } from "@/components/game/GoatFace";
 import type { Difficulty } from "@/lib/game/ai";
@@ -93,6 +94,11 @@ type Props = {
   onReplayExit: () => void;
   onCopyReplay: () => void;
   isSpectating: boolean;
+  puzzleMode: boolean;
+  puzzles: Puzzle[];
+  activePuzzleId: string | null;
+  solvedPuzzleIds: Set<string>;
+  onStartPuzzle: (id: string) => void;
 };
 
 const modeMeta: { id: GameMode; icon: React.ReactNode }[] = [
@@ -188,7 +194,12 @@ function Panel({
       <div className="flex items-center justify-between gap-2">
         <button
           type="button"
-          onClick={toggle}
+          onClick={(e) => {
+            // Stop here so the click doesn't also hit the section's onClick,
+            // which toggles a second time and would leave the panel collapsed.
+            e.stopPropagation();
+            toggle();
+          }}
           aria-expanded={open}
           className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
         >
@@ -210,7 +221,10 @@ function Panel({
           {badge}
           <button
             type="button"
-            onClick={toggle}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggle();
+            }}
             aria-expanded={open}
             aria-label={open ? `Collapse ${title}` : `Expand ${title}`}
             className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-stone-400 transition-all hover:bg-stone-800 hover:text-white active:scale-90"
@@ -338,6 +352,17 @@ export function Sidebar(p: Props) {
               id: "scoreboard",
               icon: <ShieldAlert className="h-3.5 w-3.5" />,
               label: t.scoreboard,
+            },
+            {
+              id: "analytics",
+              icon: <BarChart3 className="h-3.5 w-3.5" />,
+              label: t.analyticsTitle,
+            },
+            {
+              id: "puzzle",
+              icon: <Target className="h-3.5 w-3.5" />,
+              label: t.puzzleTitle,
+              count: p.solvedPuzzleIds.size,
             },
             {
               id: "controls",
@@ -782,6 +807,55 @@ export function Sidebar(p: Props) {
         </div>
       </Panel>
 
+      {/* Puzzle Challenge Panel */}
+      <Panel
+        id="puzzle"
+        defaultOpen={false}
+        title={t.puzzleTitle}
+        icon={<Target className="h-4 w-4 text-amber-400" />}
+        preview={`${p.solvedPuzzleIds.size} / ${p.puzzles.length} · ${t.puzzleSub}`}
+        badge={
+          p.puzzleMode ? (
+            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-300">
+              {t.on}
+            </span>
+          ) : undefined
+        }
+      >
+        <p className="mb-2.5 text-[11px] leading-relaxed text-stone-400">{t.puzzleSub}</p>
+        <div className="flex flex-col gap-2">
+          {p.puzzles.map((puzzle) => {
+            const done = p.solvedPuzzleIds.has(puzzle.id);
+            const active = puzzle.id === p.activePuzzleId;
+            return (
+              <button
+                key={puzzle.id}
+                type="button"
+                onClick={() => p.onStartPuzzle(puzzle.id)}
+                className={`flex items-center justify-between gap-2 rounded-2xl border p-3 text-left transition-all hover:-translate-y-0.5 ${
+                  active
+                    ? "border-amber-500/60 bg-amber-500/15 shadow-lg shadow-amber-950/30"
+                    : "border-white/5 bg-stone-950/60 hover:border-white/20"
+                }`}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-stone-100">
+                    {puzzle.title}
+                    {done && <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" />}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[10px] text-stone-400">
+                    {puzzle.objectiveText}
+                  </span>
+                </span>
+                <span className="shrink-0 rounded-full border border-white/10 bg-stone-950/70 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-stone-400">
+                  {puzzle.difficulty}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </Panel>
+
       {/* Multiplayer Room Sharing Link Panel */}
       <Panel
         id="invite"
@@ -806,8 +880,8 @@ export function Sidebar(p: Props) {
               readOnly
               value={
                 typeof window !== "undefined"
-                  ? `${window.location.origin}${window.location.pathname}?mode=${p.mode}&room=${p.roomId || "MATCH"}&role=tiger`
-                  : `?mode=${p.mode}&room=${p.roomId || "MATCH"}&role=tiger`
+                  ? `${window.location.origin}${window.location.pathname}?mode=${p.mode === "online" ? "online" : "hotseat"}&room=${p.roomId || "MATCH"}&role=tiger`
+                  : `?mode=${p.mode === "online" ? "online" : "hotseat"}&room=${p.roomId || "MATCH"}&role=tiger`
               }
               className="w-full bg-transparent font-mono text-[11px] text-stone-300 outline-none select-all"
             />
@@ -946,16 +1020,16 @@ export function Sidebar(p: Props) {
           onClick={p.onNewGame}
           className="t-btn-primary flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wider transition-all hover:scale-[1.02] active:scale-95"
         >
-          <RotateCcw className="h-4 w-4" />
+          <Gamepad2 className="h-4 w-4" />
           <span>{t.newGame}</span>
         </button>
 
         <button
-          onClick={p.onTour}
-          className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-3 text-xs font-black uppercase tracking-wider text-emerald-950 shadow-xl shadow-emerald-950/40 transition-all hover:scale-[1.02] active:scale-95"
+          onClick={p.onReset}
+          className="flex items-center justify-center gap-2 rounded-2xl border border-stone-800 bg-stone-900/90 px-4 py-3 text-xs font-bold tracking-wider text-stone-200 transition-all disabled:opacity-30 hover:bg-stone-800 active:scale-95"
         >
-          <GraduationCap className="h-4 w-4 text-emerald-100" />
-          <span className="text-emerald-100">{t.tourKicker}</span>
+          <RotateCcw className="h-4 w-4 t-accent-text" />
+          <span>{t.resetBoard}</span>
         </button>
 
         <button
@@ -977,6 +1051,14 @@ export function Sidebar(p: Props) {
             <Volume2 className="h-4 w-4 text-emerald-400" />
           )}
           <span>{p.muted ? t.mutedWord : t.soundOn}</span>
+        </button>
+
+        <button
+          onClick={p.onTour}
+          className="col-span-2 flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-3 text-xs font-black uppercase tracking-wider text-emerald-950 shadow-xl shadow-emerald-950/40 transition-all hover:scale-[1.02] active:scale-95"
+        >
+          <GraduationCap className="h-4 w-4 text-emerald-100" />
+          <span className="text-emerald-100">{t.tourKicker}</span>
         </button>
       </div>
     </aside>

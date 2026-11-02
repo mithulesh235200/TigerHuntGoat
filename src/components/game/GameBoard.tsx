@@ -141,13 +141,15 @@ export function GameBoard({
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onCancel);
-    window.addEventListener("pointerleave", onCancel);
+    // `window` never fires pointerleave; documentElement does when the pointer
+    // exits the viewport mid-drag, so the drag doesn't get stuck.
+    document.documentElement.addEventListener("pointerleave", onCancel);
 
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
-      window.removeEventListener("pointerleave", onCancel);
+      document.documentElement.removeEventListener("pointerleave", onCancel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dragFrom, screenToSvg, targets, onDragEnd]);

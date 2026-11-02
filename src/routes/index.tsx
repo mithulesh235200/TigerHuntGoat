@@ -14,7 +14,8 @@ import {
   X,
   Keyboard,
   Share2,
-  Gamepad2,
+  Target,
+  Check,
 } from "lucide-react";
 
 import { GameBoard } from "@/components/game/GameBoard";
@@ -48,7 +49,7 @@ import { createRoomChannel, type UnifiedRealtimeChannel } from "@/lib/online";
 import { describeMove } from "@/lib/describe";
 import { decodeMoves, encodeHistory, movesFromHistory } from "@/lib/replay";
 import { buzz, shareOrCopy, prefersReducedMotion } from "@/lib/device";
-import { getSavedLang, useLang, type Lang } from "@/lib/i18n";
+import { useLang, type Lang } from "@/lib/i18n";
 import { loadRecords, saveRecords, type GameRecord } from "@/lib/stats";
 
 export const Route = createFileRoute("/")({
@@ -123,6 +124,15 @@ function Page() {
   const [showTutorial, setShowTutorial] = useState(false);
   const [srAnnouncement, setSrAnnouncement] = useState("");
 
+  const dismissTutorial = useCallback(() => {
+    setShowTutorial(false);
+    try {
+      window.localStorage.setItem(TOUR_KEY, "1");
+    } catch {
+      // ignore
+    }
+  }, []);
+
   // Puzzle / Challenge Mode state
   const [puzzleMode, setPuzzleMode] = useState(false);
   const [currentPuzzle, setCurrentPuzzle] = useState<Puzzle | null>(null);
@@ -163,6 +173,10 @@ function Page() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onlineChannel = useRef<UnifiedRealtimeChannel | null>(null);
   const receivedOnlineState = useRef(false);
+  // Which bootstrap source won on mount: a URL deep-link (?mode/room/replay) or
+  // the locally saved match. The settings effect runs after this one and must
+  // not clobber the mode/challenge state those sources just established.
+  const initSourceRef = useRef<"url" | "match" | null>(null);
   const historyRef = useRef(history);
   const logRef = useRef(log);
   const lastMoveRef = useRef(lastMove);
@@ -182,6 +196,7 @@ function Page() {
 
     // Priority 1: Check URL parameters when joining via room link
     if (urlRoom || urlMode === "online" || urlMode === "hotseat") {
+      initSourceRef.current = "url";
       const nextMode = urlMode === "online" ? "online" : "hotseat";
       setMode(nextMode);
       setOnlineRole(urlRole === "tiger" ? "tiger" : "goat");
@@ -202,6 +217,7 @@ function Page() {
 
     // Spectator mode: watch an online match without playing
     if (urlMode === "spectate" && urlRoom) {
+      initSourceRef.current = "url";
       setMode("online");
       setOnlineRole("spectator");
       setIsSpectating(true);
@@ -219,6 +235,7 @@ function Page() {
     if (urlReplay) {
       const decoded = decodeMoves(urlReplay);
       if (decoded) {
+        initSourceRef.current = "url";
         const moves = movesFromHistory(decoded);
         let side: Side = "goat";
         const lines = moves.map((m) => {
@@ -263,6 +280,7 @@ function Page() {
               (h.winner === null || h.winner === "goat" || h.winner === "tiger"),
           );
           if (validHistory) {
+            initSourceRef.current = "match";
             setHistory(parsed.history);
             setLog(parsed.log ?? []);
             if (parsed.mode) setMode(parsed.mode);
@@ -410,10 +428,16 @@ function Page() {
         timeoutRule?: unknown;
       };
 
-      if (parsed.mode) setMode(parsed.mode);
+      // `mode`/`challengeMode` are only restored from settings when nothing more
+      // authoritative (a ?room/?mode/?replay deep-link or the saved match) has
+      // already decided them on this load — otherwise joining an invite link
+      // would immediately snap back to the previously selected local mode.
+      if (parsed.mode && initSourceRef.current === null) setMode(parsed.mode);
       if (parsed.difficulty) setDifficulty(parsed.difficulty);
       if (typeof parsed.muted === "boolean") setMuted(parsed.muted);
-      if (typeof parsed.challengeMode === "boolean") setChallengeMode(parsed.challengeMode);
+      if (typeof parsed.challengeMode === "boolean" && initSourceRef.current === null) {
+        setChallengeMode(parsed.challengeMode);
+      }
       if (parsed.timeoutSecs === 15 || parsed.timeoutSecs === 30 || parsed.timeoutSecs === 60) {
         setTimeoutSecs(parsed.timeoutSecs);
         setTurnTimeLeft(parsed.timeoutSecs);
@@ -468,7 +492,11 @@ function Page() {
     }
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     const pathname = typeof window !== "undefined" ? window.location.pathname : "/";
-    const inviteUrl = `${origin}${pathname}?mode=${mode}&room=${currentId}&role=tiger`;
+    // A room link always describes a two-player join: online when we're online,
+    // otherwise a local hotseat room. Never forward vs-AI mode — the receiver
+    // would boot into a single-player game and the invite would do nothing.
+    const inviteMode = mode === "online" ? "online" : "hotseat";
+    const inviteUrl = `${origin}${pathname}?mode=${inviteMode}&room=${currentId}&role=tiger`;
 
     const result = await shareOrCopy({
       title: "Aadu Puli Aatam — join my match",
@@ -488,8 +516,9 @@ function Page() {
 
   const state = history[history.length - 1];
   const challengeOpeningNodes = new Set([10, 11, 12, 13, 14, 15, 16, 17, 18]);
-  const humanSide: Side | null =
-    mode === "goat-vs-ai"
+  const humanSide: Side | null = puzzleMode
+    ? null
+    : mode === "goat-vs-ai"
       ? "goat"
       : mode === "tiger-vs-ai"
         ? "tiger"
@@ -498,7 +527,13 @@ function Page() {
           : null;
 
   const aiSide: Side | null =
-    mode === "goat-vs-ai" ? "tiger" : mode === "tiger-vs-ai" ? "goat" : null;
+    // Puzzles are human-controlled tactical positions: the player works both
+    // sides, so the AI must stay out of the way.
+    puzzleMode || mode === "hotseat" || mode === "online"
+      ? null
+      : mode === "goat-vs-ai"
+        ? "tiger"
+        : "goat";
 
   const isAiTurn = !state.winner && aiSide !== null && aiSide === state.turn;
   const isRemoteTurn = mode === "online" && state.turn !== onlineRole;
@@ -587,40 +622,44 @@ function Page() {
       const humanWon = humanSide ? winner === humanSide : true;
       playSound(humanWon ? "win" : "lose", muted);
       buzz(humanWon ? [50, 50, 120] : [80]);
-      setMatchStats((prev) => {
-        const updated = {
-          games: prev.games + 1,
-          goatWins: prev.goatWins + (winner === "goat" ? 1 : 0),
-          tigerWins: prev.tigerWins + (winner === "tiger" ? 1 : 0),
-          currentStreak: winner === "goat" ? prev.currentStreak + 1 : 0,
-        };
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem("aadu-puli-aatam-stats", JSON.stringify(updated));
-        }
-        return updated;
-      });
-      const finalState = fullHistory[fullHistory.length - 1];
-      setRecords((prev) => {
-        const next = [
-          ...prev,
-          {
-            d: Date.now(),
-            w: winner,
-            m: fullHistory.length - 1,
-            c: finalState.goatsCaptured,
-            mode,
-          },
-        ];
-        saveRecords(next);
-        return next.slice(-120);
-      });
+      // Puzzles are practice positions — they must never pollute the career
+      // scoreboard or the per-game analytics records.
+      if (!puzzleMode) {
+        setMatchStats((prev) => {
+          const updated = {
+            games: prev.games + 1,
+            goatWins: prev.goatWins + (winner === "goat" ? 1 : 0),
+            tigerWins: prev.tigerWins + (winner === "tiger" ? 1 : 0),
+            currentStreak: winner === "goat" ? prev.currentStreak + 1 : 0,
+          };
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem("aadu-puli-aatam-stats", JSON.stringify(updated));
+          }
+          return updated;
+        });
+        const finalState = fullHistory[fullHistory.length - 1];
+        setRecords((prev) => {
+          const next = [
+            ...prev,
+            {
+              d: Date.now(),
+              w: winner,
+              m: fullHistory.length - 1,
+              c: finalState.goatsCaptured,
+              mode,
+            },
+          ];
+          saveRecords(next);
+          return next.slice(-120);
+        });
+      }
       if (forfeit) {
         setStatus(winner === "tiger" ? t.sForfeitTigerWin : t.sForfeitGoatWin);
       } else {
         setStatus(winner === "tiger" ? t.sTigerWin : t.sGoatWin);
       }
     },
-    [humanSide, muted, mode, t],
+    [humanSide, muted, mode, t, puzzleMode],
   );
 
   const forfeit = useCallback(
@@ -636,8 +675,10 @@ function Page() {
       setTargets([]);
       playSound("lose", muted);
       recordWin(winner, [...historyRef.current, next], true);
+      // A puzzle can't be "won" by the clock — reframe a timeout as a retry.
+      if (puzzleMode) setStatus(t.puzzleFailed);
     },
-    [muted, recordWin, t],
+    [muted, recordWin, t, puzzleMode],
   );
 
   const commit = useCallback(
@@ -659,34 +700,46 @@ function Page() {
       );
       if (move.kind === "capture") buzz([30, 40, 30]);
       else buzz(10);
-      if (next.winner) {
+      if (next.winner && !puzzleMode) {
         recordWin(next.winner, [...historyRef.current, next]);
       } else if (move.kind === "capture") {
         setStatus(t.sCaptured.replace("{node}", LABELS[move.over]));
       } else {
         setStatus(next.turn === "goat" ? t.sGoatsMove : t.sTigersMove);
       }
-      // Puzzle completion check
-      if (puzzleMode && currentPuzzle && currentPuzzle.isSolved(next)) {
-        setPuzzleSolved(true);
-        setPuzzleMoves((m) => m + 1);
-        const nextSolved = new Set(puzzleSolvedHistory);
-        nextSolved.add(currentPuzzle.id);
-        setPuzzleSolvedHistory(nextSolved);
-        try {
-          window.localStorage.setItem(
-            "aadu-puli-puzzles-solved",
-            JSON.stringify([...nextSolved]),
-          );
-        } catch {
-          // ignore
+      // Puzzle completion / move-budget check.
+      if (puzzleMode && currentPuzzle) {
+        const movesUsed = puzzleMoves + 1;
+        const solved = currentPuzzle.isSolved(next);
+        const outOfMoves =
+          !solved &&
+          currentPuzzle.maxMoves != null &&
+          movesUsed >= currentPuzzle.maxMoves &&
+          !next.winner;
+        setPuzzleMoves(movesUsed);
+        if (solved) {
+          setPuzzleSolved(true);
+          const nextSolved = new Set(puzzleSolvedHistory);
+          nextSolved.add(currentPuzzle.id);
+          setPuzzleSolvedHistory(nextSolved);
+          try {
+            window.localStorage.setItem(
+              "aadu-puli-puzzles-solved",
+              JSON.stringify([...nextSolved]),
+            );
+          } catch {
+            // ignore
+          }
+          setStatus(t.puzzleSolved);
+          playSound("win", muted);
+          buzz([50, 50, 120]);
+        } else if (outOfMoves) {
+          setStatus(t.puzzleFailed);
+          playSound("invalid", muted);
         }
-        setStatus(t.puzzleSolved);
-      } else if (puzzleMode) {
-        setPuzzleMoves((m) => m + 1);
       }
     },
-    [recordWin, muted, t, puzzleMode, currentPuzzle, puzzleSolvedHistory],
+    [recordWin, muted, t, puzzleMode, currentPuzzle, puzzleSolvedHistory, puzzleMoves],
   );
 
   // Drive the in-transit travel animation (0 -> 1) whenever a move/capture commits.
@@ -847,6 +900,14 @@ function Page() {
 
   const newGame = useCallback(() => {
     cancelPendingAi();
+    // A fresh game leaves any puzzle/spectator context behind — otherwise the
+    // board would keep rendering puzzle rules (or a dead spectator state) on a
+    // brand-new standard match.
+    setPuzzleMode(false);
+    setCurrentPuzzle(null);
+    setPuzzleSolved(false);
+    setPuzzleMoves(0);
+    setIsSpectating(false);
     setSessionCount((count) => count + 1);
     setHistory([createGame()]);
     setLog([]);
@@ -860,6 +921,31 @@ function Page() {
     setGameStarted(true);
     setUndoPendingMove(null);
   }, [cancelPendingAi, t, timeoutSecs]);
+
+  // "Reset Board": rewind the current match to its opening position without
+  // leaving the game or bumping the session counter (unlike New Game).
+  const resetBoard = useCallback(() => {
+    cancelPendingAi();
+    setHistory((h) => (h.length > 0 ? [h[0]] : [createGame()]));
+    setLog([]);
+    setLastMove(null);
+    setHint(null);
+    setSelected(null);
+    setTargets([]);
+    setViewingIndex(null);
+    setUndoPendingMove(null);
+    setAnimatingMove(null);
+    setAnimProgress(0);
+    setTurnTimeLeft(timeoutSecs);
+    setGameStarted(true);
+    if (puzzleMode) {
+      setPuzzleMoves(0);
+      setPuzzleSolved(!!currentPuzzle && puzzleSolvedHistory.has(currentPuzzle.id));
+      setStatus(currentPuzzle?.objectiveText ?? t.puzzleNote);
+    } else {
+      setStatus(t.sPlaceFirst);
+    }
+  }, [cancelPendingAi, timeoutSecs, puzzleMode, currentPuzzle, puzzleSolvedHistory, t]);
 
   const toggleChallenge = useCallback(() => {
     setChallengeMode((value) => !value);
@@ -882,6 +968,11 @@ function Page() {
 
   const startMatch = (nextMode?: GameMode) => {
     cancelPendingAi();
+    setIsSpectating(false);
+    setPuzzleMode(false);
+    setCurrentPuzzle(null);
+    setPuzzleSolved(false);
+    setPuzzleMoves(0);
     if (nextMode) {
       setMode(nextMode);
       if (nextMode === "hotseat") {
@@ -913,6 +1004,11 @@ function Page() {
     const code = joinRoomCode.trim();
     if (!code) return;
     cancelPendingAi();
+    setIsSpectating(false);
+    setPuzzleMode(false);
+    setCurrentPuzzle(null);
+    setPuzzleSolved(false);
+    setPuzzleMoves(0);
     setMode("online");
     setRoomId(code);
     setOnlineRole("goat");
@@ -932,6 +1028,10 @@ function Page() {
     const code = joinRoomCode.trim();
     if (!code) return;
     cancelPendingAi();
+    setPuzzleMode(false);
+    setCurrentPuzzle(null);
+    setPuzzleSolved(false);
+    setPuzzleMoves(0);
     setMode("online");
     setOnlineRole("spectator");
     setIsSpectating(true);
@@ -953,11 +1053,14 @@ function Page() {
       const puzzle = getPuzzleById(puzzleId);
       if (!puzzle) return;
       cancelPendingAi();
+      setIsSpectating(false);
       setPuzzleMode(true);
       setCurrentPuzzle(puzzle);
       setPuzzleSolved(puzzleSolvedHistory.has(puzzleId));
       setPuzzleMoves(0);
-      setMode("goat-vs-ai"); // use AI mode for puzzle, but we control the flow
+      // `puzzleMode` forces aiSide to null, so this mode only drives the chrome —
+      // the player controls both sides of the tactical position.
+      setMode("goat-vs-ai");
       setDifficulty("easy");
       setGameStarted(true);
       setHistory([puzzle.initial()]);
@@ -982,6 +1085,14 @@ function Page() {
     setGameStarted(false);
     setStatus(t.puzzleExit);
   }, [t]);
+
+  // Jump to the next puzzle in the catalogue (wraps around at the end).
+  const nextPuzzle = useCallback(() => {
+    if (!currentPuzzle) return;
+    const index = PUZZLES.findIndex((p) => p.id === currentPuzzle.id);
+    const next = PUZZLES[(index + 1) % PUZZLES.length];
+    if (next) startPuzzle(next.id);
+  }, [currentPuzzle, startPuzzle]);
 
   const undo = useCallback(() => {
     if (history.length < 2) return;
@@ -1050,19 +1161,22 @@ function Page() {
     setHint(null);
   }, []);
 
+  // Leaving replay view stops the replay's travel animation. This effect only
+  // depends on `viewingIndex`, so it does NOT re-run when a live move commits
+  // `lastMove` (viewingIndex stays null) — otherwise it would cancel the very
+  // animation `commit()` just started and pieces would teleport instead of glide.
+  useEffect(() => {
+    if (viewingIndex != null) return;
+    setAnimatingMove(null);
+    setAnimProgress(0);
+  }, [viewingIndex]);
+
   // When the replay index changes, animate the piece from the previous state
   // to the current state using the same travel animation as live moves.
   useEffect(() => {
-    if (viewingIndex == null) {
-      setAnimatingMove(null);
-      setAnimProgress(0);
-      return;
-    }
-    const move = boardLastMove;
-    if (move) {
-      setAnimatingMove(move);
-      setAnimProgress(0);
-    }
+    if (viewingIndex == null || !boardLastMove) return;
+    setAnimatingMove(boardLastMove);
+    setAnimProgress(0);
   }, [viewingIndex, boardLastMove]);
 
   // Auto-advance replay when autoplay is enabled.
@@ -1121,22 +1235,30 @@ function Page() {
         setTargets([]);
         setHint(null);
         setShowRulesModal(false);
+        dismissTutorial();
         return;
       }
+
+      if (event.key === "?") {
+        setShowRulesModal((v) => !v);
+        return;
+      }
+
+      // Modal open: don't fire gameplay hotkeys underneath it.
+      if (showRulesModal || showTutorial) return;
 
       if (event.repeat) return;
       if (event.key.toLowerCase() === "h") showHint();
       if (event.key.toLowerCase() === "n") newGame();
       if (event.key.toLowerCase() === "u") undo();
       if (event.key.toLowerCase() === "m") setMuted((value) => !value);
-      if (event.key.toLowerCase() === "?") setShowRulesModal((v) => !v);
       if (event.key === "ArrowLeft") stepReplay(-1);
       if (event.key === "ArrowRight") stepReplay(1);
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showHint, undo, newGame, stepReplay]);
+  }, [showHint, undo, newGame, stepReplay, showRulesModal, showTutorial, dismissTutorial]);
 
   const handleModeChange = useCallback(
     (m: GameMode) => {
@@ -1495,8 +1617,9 @@ function Page() {
         </div>
       )}
 
-      {/* Match Complete Victory Celebration Overlay */}
-      {state.winner && (
+      {/* Match Complete Victory Celebration Overlay (skipped in puzzles — the
+          puzzle HUD reports success/failure in its own words) */}
+      {state.winner && !puzzleMode && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/80 px-4 backdrop-blur-md">
           <div className="t-board-frame t-overlay-card overlay-pop relative w-full max-w-md overflow-hidden rounded-3xl bg-gradient-to-b from-stone-900 via-stone-950 to-stone-950 p-8 text-center ring-1 ring-white/10">
             <Confetti winner={state.winner} seed={summary.totalMoves} />
@@ -1565,34 +1688,111 @@ function Page() {
       <div className="mx-auto max-w-7xl px-4 pt-4 sm:pt-6 lg:px-8">
         <div className="flex flex-col items-center gap-4 sm:gap-8 lg:flex-row lg:items-start lg:justify-between">
           <div className="rise flex w-full flex-1 flex-col items-center justify-center">
+            {/* Puzzle Challenge HUD — replaces the coach card during a puzzle */}
+            {puzzleMode && currentPuzzle && (
+              <div className="glass-card t-panel mb-3 w-full max-w-[620px] rounded-2xl border p-3 shadow-xl">
+                <div className="flex items-center gap-3">
+                  <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl t-icon-tile">
+                    <Target className="h-4 w-4 t-accent-text" />
+                    {puzzleSolved && (
+                      <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 text-stone-950">
+                        <Check className="h-2.5 w-2.5" strokeWidth={4} />
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="t-panel-title flex flex-wrap items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em]">
+                      {t.puzzleTitle}
+                      <span className="rounded-full border border-white/10 bg-stone-950/70 px-1.5 py-0.5 text-[9px] font-bold normal-case tracking-normal text-stone-400">
+                        {t.puzzleDifficulty}: {currentPuzzle.difficulty}
+                      </span>
+                    </div>
+                    <div className="truncate text-xs font-bold text-stone-200">
+                      {currentPuzzle.title}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="text-[9px] font-bold uppercase tracking-wider text-stone-500">
+                      {t.puzzleMoves}
+                    </div>
+                    <div className="text-sm font-black t-accent-text tabular-nums">
+                      {puzzleMoves}
+                      {currentPuzzle.maxMoves != null ? ` / ${currentPuzzle.maxMoves}` : ""}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="mt-2 text-[11px] leading-relaxed text-stone-300">
+                  {puzzleSolved
+                    ? t.puzzleSolved
+                    : state.winner && !puzzleSolved
+                      ? t.puzzleFailed
+                      : currentPuzzle.objectiveText}
+                </p>
+
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  <button
+                    onClick={showHint}
+                    disabled={!!state.winner || thinking || viewingIndex != null}
+                    className="t-btn-primary rounded-xl px-3.5 py-2 text-[11px] font-black uppercase tracking-wider transition-all disabled:opacity-30 hover:brightness-110 active:scale-95"
+                  >
+                    {t.hintBtn}
+                  </button>
+                  <button
+                    onClick={resetBoard}
+                    className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-stone-950/70 px-3.5 py-2 text-[11px] font-black uppercase tracking-wider text-stone-300 transition-all hover:border-white/25 active:scale-95"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    {t.resetBoard}
+                  </button>
+                  <button
+                    onClick={nextPuzzle}
+                    className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-stone-950/70 px-3.5 py-2 text-[11px] font-black uppercase tracking-wider text-stone-300 transition-all hover:border-white/25 active:scale-95"
+                  >
+                    {t.puzzleNext}
+                  </button>
+                  <button
+                    onClick={exitPuzzle}
+                    className="ml-auto flex items-center gap-1.5 rounded-xl px-3 py-2 text-[11px] font-bold text-stone-400 transition-all hover:text-stone-200"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    {t.puzzleExit}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Tactical Hint — on top of the board */}
-            <div className="glass-card t-panel mb-3 flex w-full max-w-[620px] items-center gap-3 rounded-2xl border p-3 shadow-xl">
-              <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl t-icon-tile">
-                <Sparkles className="h-4 w-4 t-accent-text" />
-                {!state.winner && (
-                  <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="t-panel-title flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em]">
-                  {t.tacRec}
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            {!puzzleMode && (
+              <div className="glass-card t-panel mb-3 flex w-full max-w-[620px] items-center gap-3 rounded-2xl border p-3 shadow-xl">
+                <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl t-icon-tile">
+                  <Sparkles className="h-4 w-4 t-accent-text" />
+                  {!state.winner && (
+                    <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                  )}
                 </div>
-                <div
-                  key={thinking ? "thinking" : suggestedMoveText.slice(0, 32)}
-                  className="status-flash truncate text-xs font-bold text-stone-200"
+                <div className="min-w-0 flex-1">
+                  <div className="t-panel-title flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em]">
+                    {t.tacRec}
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  </div>
+                  <div
+                    key={thinking ? "thinking" : suggestedMoveText.slice(0, 32)}
+                    className="status-flash truncate text-xs font-bold text-stone-200"
+                  >
+                    {thinking ? t.thinking : suggestedMoveText}
+                  </div>
+                </div>
+                <button
+                  onClick={showHint}
+                  disabled={!!state.winner || thinking || isAiTurn || viewingIndex != null}
+                  className="t-btn-primary shrink-0 rounded-xl px-4 py-2 text-[11px] font-black uppercase tracking-wider transition-all disabled:opacity-30 hover:scale-105 hover:brightness-110 active:scale-95"
                 >
-                  {thinking ? t.thinking : suggestedMoveText}
-                </div>
+                  {t.hintBtn}
+                </button>
               </div>
-              <button
-                onClick={showHint}
-                disabled={!!state.winner || thinking || isAiTurn || viewingIndex != null}
-                className="t-btn-primary shrink-0 rounded-xl px-4 py-2 text-[11px] font-black uppercase tracking-wider transition-all disabled:opacity-30 hover:scale-105 hover:brightness-110 active:scale-95"
-              >
-                {t.hintBtn}
-              </button>
-            </div>
+            )}
+
             <GameBoard
               state={boardState}
               selected={viewingIndex == null ? selected : null}
@@ -1604,6 +1804,7 @@ function Page() {
                 !state.winner &&
                 !isAiTurn &&
                 !isRemoteTurn &&
+                !isSpectating &&
                 !thinking &&
                 gameStarted
               }
@@ -1659,10 +1860,15 @@ function Page() {
             onDifficulty={setDifficulty}
             onToggleMute={() => setMuted((v) => !v)}
             onNewGame={newGame}
-            onReset={newGame}
+            onReset={resetBoard}
             onUndo={undo}
             onTour={() => setShowTutorial(true)}
             isSpectating={isSpectating}
+            puzzleMode={puzzleMode}
+            puzzles={PUZZLES}
+            activePuzzleId={currentPuzzle?.id ?? null}
+            solvedPuzzleIds={puzzleSolvedHistory}
+            onStartPuzzle={startPuzzle}
           />
         </div>
       </div>
@@ -1681,21 +1887,9 @@ function Page() {
 
       <Tutorial
         open={showTutorial}
-        onClose={() => {
-          setShowTutorial(false);
-          try {
-            window.localStorage.setItem(TOUR_KEY, "1");
-          } catch {
-            // ignore
-          }
-        }}
+        onClose={dismissTutorial}
         onPractice={() => {
-          setShowTutorial(false);
-          try {
-            window.localStorage.setItem(TOUR_KEY, "1");
-          } catch {
-            // ignore
-          }
+          dismissTutorial();
           setMode("goat-vs-ai");
           setDifficulty("easy");
           startMatch("goat-vs-ai");
